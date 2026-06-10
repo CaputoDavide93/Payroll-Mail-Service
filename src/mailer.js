@@ -27,6 +27,19 @@ function escapeHtml(str) {
     .replace(/>/g, '&gt;');
 }
 
+// Collapse CR/LF so values placed into email headers can't inject extra headers.
+// (nodemailer also guards this, but we don't want to rely solely on the library.)
+function stripHeader(value) {
+  return String(value).replace(/[\r\n]+/g, ' ').trim();
+}
+
+// Build a "Name <email>" From header from raw operator-supplied parts.
+function buildFrom(name, email) {
+  const e = stripHeader(email);
+  const n = stripHeader(name).replace(/"/g, '');
+  return n ? `"${n}" <${e}>` : e;
+}
+
 // Replace {placeholders} with recipient fields. Unknown placeholders are left blank.
 export function renderTemplate(template, fields) {
   return String(template).replace(/\{\s*([\w.-]+)\s*\}/g, (_, key) => {
@@ -45,9 +58,11 @@ function fieldsFor(recipient) {
 }
 
 // Send one message. `campaign` provides subject/body/attachment/from.
-export async function sendOne(transport, campaign, recipient, fromHeader) {
+// `toOverride` redirects delivery (used for previews) while still rendering
+// the template against the sample recipient's fields.
+export async function sendOne(transport, campaign, recipient, fromHeader, toOverride) {
   const fields = fieldsFor(recipient);
-  const subject = renderTemplate(campaign.subject, fields);
+  const subject = stripHeader(renderTemplate(campaign.subject, fields));
   const bodyText = renderTemplate(campaign.body, fields);
   const html = `<!doctype html><html><body style="font-family:Arial,Helvetica,sans-serif;font-size:15px;color:#222;line-height:1.5">${
     escapeHtml(bodyText).replace(/\n/g, '<br>')
@@ -55,7 +70,7 @@ export async function sendOne(transport, campaign, recipient, fromHeader) {
 
   const message = {
     from: fromHeader,
-    to: recipient.email,
+    to: toOverride || recipient.email,
     subject,
     text: bodyText,
     html
@@ -73,9 +88,7 @@ export async function sendOne(transport, campaign, recipient, fromHeader) {
 
 export function fromHeaderFor(campaign) {
   const s = getSettings();
-  const name = campaign.from_name || s.from_name || '';
-  const email = campaign.from_email || s.from_email || s.smtp_user;
-  return name ? `"${name.replace(/"/g, '')}" <${email}>` : email;
+  return buildFrom(campaign.from_name || s.from_name || '', campaign.from_email || s.from_email || s.smtp_user);
 }
 
 // Verify the SMTP connection and optionally send a test email.
@@ -83,7 +96,7 @@ export async function sendTest(toEmail, sampleName = 'there') {
   const transport = buildTransport();
   await transport.verify();
   const s = getSettings();
-  const from = s.from_name ? `"${s.from_name}" <${s.from_email || s.smtp_user}>` : (s.from_email || s.smtp_user);
+  const from = buildFrom(s.from_name, s.from_email || s.smtp_user);
   await transport.sendMail({
     from,
     to: toEmail,
