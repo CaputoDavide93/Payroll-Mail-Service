@@ -3,7 +3,6 @@ import path from 'node:path';
 
 const SUPPORTED_EXTS = new Set(['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.png', '.jpg', '.jpeg']);
 
-// List all supported attachment files in a directory.
 export function listAttachmentFiles(folderPath) {
   if (!fs.existsSync(folderPath)) throw new Error(`Folder not found: ${folderPath}`);
   const stat = fs.statSync(folderPath);
@@ -13,25 +12,23 @@ export function listAttachmentFiles(folderPath) {
     .sort();
 }
 
-// Fuzzy fallback: check if all name parts appear in the normalised filename.
 function normStr(s) {
   return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ' ').trim();
 }
 
-function fuzzyMatch(name, filenames) {
+function fuzzyMatch(name, filenames, usedFiles) {
   const parts = normStr(name).split(/\s+/).filter(Boolean);
   if (parts.length === 0) return null;
   const candidates = filenames.filter((f) => {
+    if (usedFiles.has(f)) return false;
     const nf = normStr(f);
     return parts.every((p) => nf.includes(p));
   });
   if (candidates.length === 1) return candidates[0];
-  // If multiple match, prefer shortest filename (most specific).
   if (candidates.length > 1) return candidates.sort((a, b) => a.length - b.length)[0];
   return null;
 }
 
-// AI matching via Claude API. Returns [{email, filename, confidence}].
 async function aiMatch(recipients, filenames, apiKey) {
   const prompt = `You are matching payroll attachment files to employee recipients.
 
@@ -64,24 +61,22 @@ Only include recipients you matched. Skip unmatched ones.`;
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Claude API error ${res.status}: ${err}`);
+    throw new Error(`Claude API error ${res.status}`);  // don't surface raw API response
   }
 
   const data = await res.json();
   const text = data.content?.[0]?.text || '';
 
-  // Extract JSON from the response (strip any accidental markdown fences).
-  const jsonStr = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
-  return JSON.parse(jsonStr);
+  // Extract JSON array — handle fences, leading text, trailing text
+  const jsonMatch = text.match(/\[[\s\S]*\]/);
+  if (!jsonMatch) throw new Error('Claude returned no JSON array in matching response.');
+  try {
+    return JSON.parse(jsonMatch[0]);
+  } catch {
+    throw new Error('Claude returned malformed JSON in matching response.');
+  }
 }
 
-/**
- * Match recipients to files in folderPath.
- * Returns:
- *   matched          — [{email, name, filename, path, confidence}]
- *   unmatched        — recipients with no file found
- *   unmatched_files  — files that weren't claimed by any recipient
- */
 export async function matchAttachments(recipients, folderPath, apiKey) {
   const files = listAttachmentFiles(folderPath);
   if (files.length === 0) throw new Error(`No supported files found in ${folderPath}`);
@@ -97,8 +92,12 @@ export async function matchAttachments(recipients, folderPath, apiKey) {
     }
   }
 
-  // Build a set of what AI matched (keyed by email).
-  const aiMap = new Map(aiResults.map((r) => [r.email.toLowerCase(), r]));
+  // Keyed by email; also validate that filenames returned by AI actually exist
+  const aiMap = new Map(
+    aiResults
+      .filter((r) => r.email && r.filename && files.includes(r.filename))
+      .map((r) => [r.email.toLowerCase(), r])
+  );
 
   const matched = [];
   const unmatched = [];
@@ -109,16 +108,16 @@ export async function matchAttachments(recipients, folderPath, apiKey) {
     let filename = null;
     let confidence = 'low';
 
-    // 1. Use AI result if available and file exists.
+    // 1. AI result — only use if file not already taken by an earlier recipient
     const aiHit = aiMap.get(emailKey);
-    if (aiHit && files.includes(aiHit.filename)) {
+    if (aiHit && !usedFiles.has(aiHit.filename)) {
       filename = aiHit.filename;
       confidence = aiHit.confidence || 'high';
     }
 
-    // 2. Fuzzy fallback for anything AI missed or if no API key.
+    // 2. Fuzzy fallback — skips already-used files internally
     if (!filename) {
-      filename = fuzzyMatch(recipient.name, files);
+      filename = fuzzyMatch(recipient.name, files, usedFiles);
       if (filename) confidence = 'medium';
     }
 
@@ -137,6 +136,5 @@ export async function matchAttachments(recipients, folderPath, apiKey) {
   }
 
   const unmatched_files = files.filter((f) => !usedFiles.has(f));
-
   return { matched, unmatched, unmatched_files, ai_errors: aiErrors };
 }

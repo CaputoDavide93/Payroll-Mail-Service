@@ -2,7 +2,8 @@
 
 const $ = (sel) => document.querySelector(sel);
 
-let appPassword = localStorage.getItem('appPassword') || '';
+// sessionStorage scopes the password to this tab session only (safer than localStorage for PII workflows)
+let appPassword = sessionStorage.getItem('appPassword') || '';
 let currentRunId = null;
 
 async function api(path, opts = {}) {
@@ -24,7 +25,7 @@ function promptLogin() {
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   appPassword = $('#loginPassword').value;
-  localStorage.setItem('appPassword', appPassword);
+  sessionStorage.setItem('appPassword', appPassword);
   try {
     await api('/api/settings');
     $('#loginDialog').close();
@@ -129,9 +130,13 @@ $('#prepareBtn').addEventListener('click', async () => {
     if (!res.ok) throw new Error(data.error || 'Prepare failed.');
 
     currentRunId = data.run_id;
+    // Reset pre-flight on new prepare
+    $('#preflightResult').textContent = '';
+    $('#preflightStatus').textContent = '';
     renderMatchResults(data);
     st.textContent = '';
     showStep(2);
+    loadRuns();
   } catch (err) {
     st.className = 'status err'; st.textContent = err.message;
   } finally {
@@ -205,13 +210,69 @@ function renderMatchResults(data) {
     container.appendChild(ul);
   }
 
-  if (matched.length === 0) {
+  const noMatches = matched.length === 0;
+  if (noMatches) {
     container.appendChild(el('p', 'status err', 'No payslips could be matched and protected. Check the files and try again.'));
-    $('#sendSetupBtn').disabled = true;
-  } else {
-    $('#sendSetupBtn').disabled = false;
   }
+  $('#sendSetupBtn').disabled = noMatches;
+  $('#preflightBtn').disabled = noMatches;
 }
+
+// ---- Pre-flight check ----
+$('#preflightBtn').addEventListener('click', async () => {
+  if (!currentRunId) return;
+  const st = $('#preflightStatus');
+  const container = $('#preflightResult');
+  container.textContent = '';
+  st.className = 'status'; st.textContent = 'Asking AI to review matches…';
+  $('#preflightBtn').disabled = true;
+
+  try {
+    const data = await api('/api/payslips/preflight', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ run_id: currentRunId })
+    });
+    st.textContent = '';
+
+    if (data.skipped) {
+      const box = el('div', 'preflight-box preflight-ok');
+      box.appendChild(el('strong', null, 'Pre-flight check skipped'));
+      box.appendChild(el('p', null, 'No ANTHROPIC_API_KEY configured — set it in Settings to enable AI review.'));
+      container.appendChild(box);
+      return;
+    }
+
+    if (data.all_clear) {
+      const box = el('div', 'preflight-box preflight-ok');
+      box.appendChild(el('strong', null, '✓ All clear — AI found no issues'));
+      if (data.summary) box.appendChild(el('p', null, data.summary));
+      container.appendChild(box);
+    } else {
+      const box = el('div', 'preflight-box preflight-warn');
+      box.appendChild(el('strong', null, `⚠ ${data.issues.length} potential issue${data.issues.length === 1 ? '' : 's'} found — review before sending`));
+      if (data.summary) {
+        const p = el('p', null, data.summary);
+        p.style.margin = '.4rem 0 .75rem';
+        box.appendChild(p);
+      }
+      for (const issue of data.issues) {
+        const row = el('div', 'preflight-issue');
+        const sevCls = issue.severity === 'high' ? 'sev-high' : 'sev-medium';
+        row.appendChild(el('span', sevCls, issue.severity.toUpperCase()));
+        const detail = el('span');
+        detail.textContent = `${issue.name} (${issue.email}) → ${issue.filename}: ${issue.message}`;
+        row.appendChild(detail);
+        box.appendChild(row);
+      }
+      container.appendChild(box);
+    }
+  } catch (err) {
+    st.className = 'status err'; st.textContent = 'Pre-flight failed: ' + err.message;
+  } finally {
+    $('#preflightBtn').disabled = false;
+  }
+});
 
 // ---- Step 3: Send ----
 $('#sendForm').addEventListener('submit', async (e) => {
@@ -243,10 +304,63 @@ $('#sendForm').addEventListener('submit', async (e) => {
     link.textContent = 'View campaigns →';
     st.appendChild(link);
     currentRunId = null;
+    loadRuns();
   } catch (err) {
     st.className = 'status err'; st.textContent = err.message;
   } finally {
     btn.disabled = false;
+  }
+});
+
+// ---- Cleanup / server data ----
+async function loadRuns() {
+  try {
+    const runs = await api('/api/payslips/runs');
+    const card = $('#cleanupCard');
+    const list = $('#runsList');
+    list.textContent = '';
+
+    if (runs.length === 0) {
+      card.style.display = 'none';
+      return;
+    }
+
+    card.style.display = '';
+    for (const r of runs) {
+      const li = el('li');
+      const fmt = r.created ? new Date(r.created).toLocaleString() : 'unknown date';
+      const info = el('span', null, `Run ${r.run_id} — ${r.recipient_count} payslip${r.recipient_count === 1 ? '' : 's'} — ${fmt}`);
+      const delBtn = el('button', 'btn small danger');
+      delBtn.textContent = 'Delete';
+      delBtn.addEventListener('click', async () => {
+        delBtn.disabled = true;
+        try {
+          await api(`/api/payslips/runs/${r.run_id}`, { method: 'DELETE' });
+          loadRuns();
+        } catch (err) {
+          alert(err.message);
+          delBtn.disabled = false;
+        }
+      });
+      li.appendChild(info);
+      li.appendChild(delBtn);
+      list.appendChild(li);
+    }
+  } catch { /* ignore */ }
+}
+
+$('#deleteAllBtn').addEventListener('click', async () => {
+  if (!confirm('Delete ALL payslip data from the server? This removes all protected PDFs and match results.')) return;
+  const st = $('#cleanupStatus');
+  st.className = 'status'; st.textContent = 'Deleting…';
+  try {
+    const r = await api('/api/payslips/runs/all', { method: 'DELETE' });
+    st.className = 'status ok'; st.textContent = `Deleted ${r.deleted} run${r.deleted === 1 ? '' : 's'}.`;
+    currentRunId = null;
+    showStep(1);
+    loadRuns();
+  } catch (err) {
+    st.className = 'status err'; st.textContent = err.message;
   }
 });
 
@@ -258,6 +372,7 @@ async function init() {
     try { await api('/api/settings'); } catch { promptLogin(); return; }
   }
   showStep(1);
+  loadRuns();
 }
 
 init();

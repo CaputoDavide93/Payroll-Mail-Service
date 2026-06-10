@@ -14,7 +14,7 @@ import {
   campaignStats, failedRecipients, deleteCampaign, requeueFailed, firstRecipient
 } from './src/campaigns.js';
 import { startWorker, stopWorker } from './src/worker.js';
-import { preparePayslips, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { preparePayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
 import { getAnthropicApiKey } from './src/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -74,7 +74,7 @@ app.use('/api', (req, res, next) => {
 // Wrap a handler so BOTH synchronous throws and rejected promises become a clean
 // JSON error response (Promise.resolve(fn()) would miss a synchronous throw inside fn).
 const wrap = (fn) => (req, res) => Promise.resolve().then(() => fn(req, res)).catch((err) => {
-  console.error(err);
+  console.error(err.message);  // message only — full err object may contain PII in argv (e.g. qpdf)
   if (res.headersSent) return;
   const status = err.status || (err.message?.includes('not found') ? 404 : err.code ? 500 : 400);
   res.status(status).json({ error: err.message });
@@ -236,8 +236,27 @@ function intField(value, fallback) {
 // ---- Payslips ----
 const payslipsUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 } // 100 MB — zip archives can be large
+  limits: { fileSize: 100 * 1024 * 1024 }
 });
+
+// Validate run_id: server-generated base36 timestamp, no path traversal possible
+function assertRunId(run_id) {
+  if (!run_id || !/^[a-z0-9]+$/.test(run_id)) throw new Error('Invalid run_id.');
+  const resolved = path.resolve(path.join(PAYSLIPS_DIR, run_id));
+  if (!resolved.startsWith(path.resolve(PAYSLIPS_DIR) + path.sep)) throw new Error('Invalid run_id.');
+  return resolved;
+}
+
+// Load results.json for a run; throws if missing or corrupt.
+function loadRunResults(run_id) {
+  const runDir = assertRunId(run_id);
+  const resultFile = path.join(runDir, 'results.json');
+  try {
+    return JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+  } catch {
+    throw new Error('Prepared run not found or corrupted. Please re-upload files.');
+  }
+}
 
 // Step 1: Upload Excel + ZIP, run AI-match + protect pipeline.
 app.post('/api/payslips/prepare', payslipsUpload.fields([
@@ -252,11 +271,10 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
   const apiKey = getAnthropicApiKey();
   const outcome = await preparePayslips(excelFile.buffer, zipFile.buffer, apiKey);
 
-  // Persist results so the send step can reference them by run_id.
+  // Persist results — NI numbers are NOT in outcome.results (stripped in preparePayslips)
   const resultFile = path.join(PAYSLIPS_DIR, outcome.run_id, 'results.json');
   fs.writeFileSync(resultFile, JSON.stringify(outcome));
 
-  // Strip file system paths from the API response — client only needs metadata.
   res.json({
     run_id: outcome.run_id,
     matched: outcome.results.map((r) => ({ email: r.email, name: r.name, filename: r.filename, confidence: r.confidence })),
@@ -267,6 +285,16 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
   });
 }));
 
+// Step 1b: AI pre-flight check on a prepared run.
+app.post('/api/payslips/preflight', wrap(async (req, res) => {
+  const { run_id } = req.body;
+  if (!run_id) throw new Error('Missing run_id.');
+  const outcome = loadRunResults(run_id);
+  if (!outcome.results?.length) throw new Error('No matched payslips to check.');
+  const result = await preflightCheck(outcome.results);
+  res.json(result);
+}));
+
 // Step 2: Create a campaign from a prepared payslips run (per-recipient attachments).
 app.post('/api/payslips/send', wrap((req, res) => {
   const { run_id, name, subject, body, from_name, from_email, batch_size, batch_interval_seconds, as_draft } = req.body;
@@ -275,24 +303,17 @@ app.post('/api/payslips/send', wrap((req, res) => {
   if (!subject?.trim()) throw new Error('Please enter a subject line.');
   if (!body?.trim()) throw new Error('Please write the email body.');
 
-  const resultFile = path.join(PAYSLIPS_DIR, run_id, 'results.json');
-  if (!fs.existsSync(resultFile)) throw new Error('Prepared run not found. Please re-upload files.');
-  const outcome = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
-
-  if (!outcome.results || outcome.results.length === 0) {
-    throw new Error('No successfully prepared payslips in this run.');
-  }
+  const outcome = loadRunResults(run_id);
+  if (!outcome.results?.length) throw new Error('No successfully prepared payslips in this run.');
 
   const recipients = outcome.results.map((r) => ({
     email: r.email,
     name: r.name,
     attachment_path: r.protected_path,
-    fields_json: JSON.stringify({ name: r.name, email: r.email })
+    fields_json: JSON.stringify({ name: r.name, email: r.email, filename: r.filename })
   }));
 
-  const scheduled_start = null; // payslips always start immediately
   const status = (as_draft === 'true' || as_draft === true) ? 'draft' : 'running';
-
   const id = createCampaign({
     name: name.trim(),
     subject: subject.trim(),
@@ -303,11 +324,24 @@ app.post('/api/payslips/send', wrap((req, res) => {
     attachment_name: null,
     batch_size: Math.max(1, intField(batch_size, 10)),
     batch_interval_seconds: Math.max(0, intField(batch_interval_seconds, 60)),
-    scheduled_start,
+    scheduled_start: null,
     status
   }, recipients);
 
   res.json({ id, accepted: recipients.length });
+}));
+
+// Run management — list, delete one, delete all
+app.get('/api/payslips/runs', wrap((req, res) => res.json(listRuns())));
+
+app.delete('/api/payslips/runs/all', wrap((req, res) => {
+  const count = deleteAllRuns();
+  res.json({ ok: true, deleted: count });
+}));
+
+app.delete('/api/payslips/runs/:runId', wrap((req, res) => {
+  deleteRun(req.params.runId);
+  res.json({ ok: true });
 }));
 
 app.use(express.static(path.join(__dirname, 'public')));

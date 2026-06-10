@@ -31,6 +31,16 @@
     #step2, #step3 { display: none; }
     .upload-row { display: flex; gap: 1rem; flex-wrap: wrap; }
     .upload-col { flex: 1; min-width: 220px; }
+    .preflight-box { border-radius: 6px; padding: 1rem; margin-top: 1rem; border: 1px solid; }
+    .preflight-ok { background: #f0faf0; border-color: #86c986; color: #1a5c1a; }
+    .preflight-warn { background: #fff8f0; border-color: #e8a83c; color: #7a4400; }
+    .preflight-issue { display: flex; gap: .5rem; padding: .35rem 0; border-bottom: 1px solid rgba(0,0,0,.06); font-size: .875rem; }
+    .preflight-issue:last-child { border-bottom: none; }
+    .sev-high { color: #c00; font-weight: 700; flex-shrink: 0; }
+    .sev-medium { color: #b45309; font-weight: 700; flex-shrink: 0; }
+    .cleanup-card { background: #fff8f0; border: 1px solid #e8a83c; border-radius: 8px; padding: 1.2rem 1.5rem; margin-top: 2rem; }
+    .runs-list { font-size: .875rem; margin: .5rem 0; }
+    .runs-list li { padding: .25rem 0; display: flex; align-items: center; justify-content: space-between; gap: .5rem; }
   </style>
 </head>
 <body>
@@ -75,6 +85,16 @@
     <div class="step-card" id="step2">
       <h2><span class="step-num">2</span> Review matches</h2>
       <div id="matchResults"></div>
+
+      <!-- Pre-flight check -->
+      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border,#e0e0e0)">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <button id="preflightBtn" class="btn">🔍 Run AI pre-flight check</button>
+          <span id="preflightStatus" class="status muted" style="font-size:.875rem"></span>
+        </div>
+        <div id="preflightResult"></div>
+      </div>
+
       <div style="margin-top:1.25rem">
         <button id="backBtn" class="btn">← Back</button>
         <button id="sendSetupBtn" class="btn primary" style="margin-left:.5rem">Set up email →</button>
@@ -123,7 +143,6 @@ Kind regards</textarea>
         </div>
       </form>
     </div>
-  </main>
 
   <!-- Settings dialog (reuse same pattern as main app) -->
   <dialog id="settingsDialog" class="card dialog">
@@ -154,6 +173,18 @@ Kind regards</textarea>
       <button type="submit" class="btn primary" style="width:100%">Sign in</button>
     </form>
   </dialog>
+
+    <!-- Cleanup panel -->
+    <div class="cleanup-card" id="cleanupCard" style="display:none">
+      <strong>Server data</strong>
+      <p class="muted" style="margin:.4rem 0 .75rem;font-size:.875rem">Protected PDFs and match results are stored on the server. Delete them when you're done to keep the server clean and remove PII.</p>
+      <ul class="runs-list" id="runsList"></ul>
+      <div style="margin-top:.75rem;display:flex;gap:.75rem;align-items:center;flex-wrap:wrap">
+        <button id="deleteAllBtn" class="btn small danger">Delete all data</button>
+        <span id="cleanupStatus" class="status" style="font-size:.875rem"></span>
+      </div>
+    </div>
+  </main>
 
   <script src="payslips.js"></script>
 </body>
