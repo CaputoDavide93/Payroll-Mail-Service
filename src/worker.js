@@ -7,9 +7,13 @@ const TICK_MS = 2000;       // how often the worker wakes up
 const MAX_ATTEMPTS = 3;     // per-recipient retries before marking failed
 const RETRY_BACKOFF_MS = 1500;
 
-let running = false; // re-entrancy guard so ticks never overlap
+let running = false;   // re-entrancy guard so ticks never overlap
+let stopping = false;  // set on shutdown so no new tick begins
+let intervalId = null;
 
 const log = (...args) => console.log(new Date().toISOString(), '[worker]', ...args);
+
+const currentStatusStmt = db.prepare('SELECT status FROM campaigns WHERE id = ?');
 
 // How many emails were sent in the last 24h (across all campaigns) — for the daily cap.
 const sentLast24hStmt = db.prepare(
@@ -57,7 +61,7 @@ async function trySend(transport, campaign, recipient, fromHeader) {
 }
 
 async function tick() {
-  if (running) return;
+  if (running || stopping) return;
   running = true;
   let transport;
   try {
@@ -102,8 +106,13 @@ async function tick() {
       else markFailedStmt.run(result.error, recipient.id);
     }
 
-    // 4) Schedule the next batch after the configured interval.
-    setStatus(campaign.id, 'running', { next_batch_at: isoIn(campaign.batch_interval_seconds) });
+    // 4) Schedule the next batch — but only if the operator didn't pause/cancel
+    // during the (potentially long) send loop above. Re-read the live status so
+    // we never resurrect a campaign the operator explicitly stopped.
+    const fresh = currentStatusStmt.get(campaign.id);
+    if (fresh && fresh.status === 'running') {
+      setStatus(campaign.id, 'running', { next_batch_at: isoIn(campaign.batch_interval_seconds) });
+    }
   } catch (err) {
     log('tick error:', err.message);
   } finally {
@@ -120,5 +129,14 @@ export function startWorker() {
   // Nothing special needed to "resume" after a restart: running campaigns are read
   // straight from the DB on the next tick, so progress continues automatically.
   log('background worker started');
-  setInterval(() => { tick().catch((e) => log('unhandled tick error', e)); }, TICK_MS);
+  intervalId = setInterval(() => { tick().catch((e) => log('unhandled tick error', e)); }, TICK_MS);
+}
+
+// Stop accepting new batches and wait for any in-flight batch to finish, so a
+// shutdown doesn't kill a send mid-flight (which would re-send on restart).
+export async function stopWorker() {
+  stopping = true;
+  if (intervalId) clearInterval(intervalId);
+  const deadline = Date.now() + 30000;
+  while (running && Date.now() < deadline) await sleep(100);
 }

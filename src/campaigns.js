@@ -49,8 +49,18 @@ export function getCampaign(id) {
   return getCampaignStmt.get(id);
 }
 
+const firstRecipientStmt = db.prepare('SELECT * FROM recipients WHERE campaign_id = ? ORDER BY id LIMIT 1');
+export function firstRecipient(id) {
+  return firstRecipientStmt.get(id);
+}
+
 export function listCampaigns() {
-  return listCampaignsStmt.all().map((c) => ({ ...c, stats: campaignStats(c.id) }));
+  // Failures are included here so the dashboard needs a single request, not one per campaign.
+  return listCampaignsStmt.all().map((c) => ({
+    ...c,
+    stats: campaignStats(c.id),
+    failures: failedRecipients(c.id)
+  }));
 }
 
 export function setStatus(id, status, extra = {}) {
@@ -62,7 +72,7 @@ export function setStatus(id, status, extra = {}) {
 }
 
 const failedRecipientsStmt = db.prepare(
-  "SELECT email, name, error FROM recipients WHERE campaign_id = ? AND status = 'failed' ORDER BY id"
+  "SELECT email, name, error FROM recipients WHERE campaign_id = ? AND status = 'failed' ORDER BY id LIMIT 100"
 );
 export function failedRecipients(id) {
   return failedRecipientsStmt.all(id);

@@ -55,9 +55,8 @@ async function openSettings() {
   settingsDialog.showModal();
 }
 
-$('#settingsForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const f = e.target;
+async function saveSettings() {
+  const f = $('#settingsForm');
   const body = {
     smtp_host: f.smtp_host.value,
     smtp_port: f.smtp_port.value,
@@ -68,9 +67,14 @@ $('#settingsForm').addEventListener('submit', async (e) => {
     from_email: f.from_email.value,
     daily_limit: f.daily_limit.value
   };
+  return api('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+$('#settingsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
   const st = $('#settingsStatus');
   try {
-    await api('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    await saveSettings();
     st.className = 'status ok'; st.textContent = 'Saved.';
   } catch (err) {
     st.className = 'status err'; st.textContent = err.message;
@@ -81,10 +85,9 @@ $('#testBtn').addEventListener('click', async () => {
   const to = $('#testTo').value.trim();
   const st = $('#settingsStatus');
   if (!to) { st.className = 'status err'; st.textContent = 'Enter an address to send the test to.'; return; }
-  st.className = 'status'; st.textContent = 'Sending test…';
+  st.className = 'status'; st.textContent = 'Saving & sending test…';
   try {
-    // Save first so the test uses the latest values.
-    await $('#settingsForm').requestSubmit();
+    await saveSettings(); // make sure the test uses exactly what's on screen
     await api('/api/settings/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
     st.className = 'status ok'; st.textContent = `Test sent to ${to} — check the inbox.`;
   } catch (err) {
@@ -158,6 +161,7 @@ function controlsFor(c) {
     buttons.push(`<button class="btn small danger" data-act="cancel" data-id="${c.id}">Stop</button>`);
   if (c.stats.failed > 0 && c.status !== 'running')
     buttons.push(`<button class="btn small" data-act="requeue-failed" data-id="${c.id}">Retry failed</button>`);
+  buttons.push(`<button class="btn small" data-act="preview" data-id="${c.id}">Send preview</button>`);
   buttons.push(`<button class="btn small danger" data-act="delete" data-id="${c.id}">Delete</button>`);
   return buttons.join('');
 }
@@ -201,20 +205,19 @@ function esc(s) {
   return String(s).replace(/[&<>]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[ch]));
 }
 
-let detailCache = {};
+let lastSig = '';
 async function loadCampaigns() {
   try {
+    // The list endpoint already includes failure details, so this is a single request.
     const list = await api('/api/campaigns');
     const el = $('#campaignList');
-    if (!list.length) { el.innerHTML = '<p class="muted">No sends yet. Create one above.</p>'; return; }
-    // Pull failure details for campaigns that have failures.
-    const withFailures = await Promise.all(list.map(async (c) => {
-      if (c.stats.failed > 0) {
-        try { const d = await api('/api/campaigns/' + c.id); c.failures = d.failures; } catch { /* ignore */ }
-      }
-      return c;
-    }));
-    el.innerHTML = withFailures.map(renderCampaign).join('');
+    if (!list.length) { el.innerHTML = '<p class="muted">No sends yet. Create one above.</p>'; lastSig = 'empty'; return; }
+    // Only re-render when something actually changed, so an open "failed — view"
+    // panel isn't collapsed on every poll.
+    const sig = JSON.stringify(list);
+    if (sig === lastSig) return;
+    lastSig = sig;
+    el.innerHTML = list.map(renderCampaign).join('');
   } catch (err) {
     if (err.message !== 'Unauthorized') $('#campaignList').innerHTML = `<p class="error">${esc(err.message)}</p>`;
   }
@@ -228,11 +231,22 @@ $('#campaignList').addEventListener('click', async (e) => {
   if (act === 'cancel' && !confirm('Stop this send? Remaining recipients will not receive the email.')) return;
   btn.disabled = true;
   try {
-    if (act === 'delete') await api('/api/campaigns/' + id, { method: 'DELETE' });
-    else await api(`/api/campaigns/${id}/${act}`, { method: 'POST' });
+    if (act === 'preview') {
+      const to = prompt('Send a preview of this email (with the attachment) to which address?');
+      if (to && to.trim()) {
+        await api(`/api/campaigns/${id}/test`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to: to.trim() }) });
+        alert('Preview sent to ' + to.trim() + ' — check the inbox.');
+      }
+    } else if (act === 'delete') {
+      await api('/api/campaigns/' + id, { method: 'DELETE' });
+    } else {
+      await api(`/api/campaigns/${id}/${act}`, { method: 'POST' });
+    }
+    lastSig = ''; // force a refresh after any state change
     loadCampaigns();
   } catch (err) {
     alert(err.message);
+  } finally {
     btn.disabled = false;
   }
 });
