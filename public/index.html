@@ -1,0 +1,158 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payroll Mail Service</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">✉️</span>
+      <div>
+        <h1>Payroll Mail Service</h1>
+        <p class="tagline">Send a personalized email with an attachment to your whole list — safely, in batches.</p>
+      </div>
+    </div>
+    <button id="settingsBtn" class="btn ghost">⚙️ Settings</button>
+  </header>
+
+  <!-- Login (only shown when password protection is on) -->
+  <dialog id="loginDialog">
+    <form method="dialog" id="loginForm" class="card">
+      <h2>Enter password</h2>
+      <p class="muted">This service is password protected.</p>
+      <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" />
+      <div class="row end"><button class="btn primary" id="loginSubmit">Unlock</button></div>
+      <p class="error" id="loginError"></p>
+    </form>
+  </dialog>
+
+  <!-- Settings -->
+  <dialog id="settingsDialog">
+    <form id="settingsForm" class="card wide">
+      <div class="row between">
+        <h2>Gmail / Workspace settings</h2>
+        <button type="button" class="btn ghost small" id="settingsClose">✕</button>
+      </div>
+      <p class="muted">One-time setup. Uses an <b>App Password</b> — see the README for the 2-minute steps.</p>
+
+      <label>SMTP host
+        <input name="smtp_host" value="smtp.gmail.com" />
+      </label>
+      <div class="grid2">
+        <label>Port
+          <select name="smtp_port" id="smtpPort">
+            <option value="465">465 (SSL)</option>
+            <option value="587">587 (STARTTLS)</option>
+          </select>
+        </label>
+        <label>Daily send limit
+          <input name="daily_limit" type="number" min="1" value="1800" />
+        </label>
+      </div>
+      <label>Gmail / Workspace address (login)
+        <input name="smtp_user" placeholder="you@yourcompany.com" autocomplete="username" />
+      </label>
+      <label>App Password
+        <input name="smtp_pass" type="password" placeholder="16-character app password" autocomplete="off" />
+        <span class="hint" id="passHint"></span>
+      </label>
+      <div class="grid2">
+        <label>From name (shown to recipients)
+          <input name="from_name" placeholder="Payroll Team" />
+        </label>
+        <label>From address
+          <input name="from_email" placeholder="payroll@yourcompany.com" />
+        </label>
+      </div>
+
+      <div class="row between wrap">
+        <div class="row">
+          <input type="email" id="testTo" placeholder="Send test email to…" />
+          <button type="button" class="btn" id="testBtn">Send test</button>
+        </div>
+        <button type="submit" class="btn primary">Save settings</button>
+      </div>
+      <p class="status" id="settingsStatus"></p>
+    </form>
+  </dialog>
+
+  <main class="container">
+    <!-- New campaign -->
+    <section class="card">
+      <h2>New send</h2>
+      <form id="campaignForm">
+        <label>Campaign name <span class="req">*</span>
+          <input name="name" placeholder="June payslips" required />
+        </label>
+
+        <div class="grid2">
+          <label>From name
+            <input name="from_name" placeholder="(defaults to Settings)" />
+          </label>
+          <label>From address
+            <input name="from_email" placeholder="(defaults to Settings)" />
+          </label>
+        </div>
+
+        <label>Subject <span class="req">*</span>
+          <input name="subject" placeholder="Your June payslip, {name}" required />
+        </label>
+
+        <label>Email body <span class="req">*</span>
+          <textarea name="body" rows="9" required placeholder="Hi {name},
+
+Please find your payslip attached.
+
+Best regards,
+The Payroll Team"></textarea>
+        </label>
+        <p class="hint">Use <code>{name}</code> to insert each person's name. Any other CSV column works too, e.g. <code>{department}</code>.</p>
+
+        <div class="grid2">
+          <label>Recipients (CSV) <span class="req">*</span>
+            <input type="file" name="recipients" id="recipientsFile" accept=".csv,text/csv" required />
+            <span class="hint" id="recipientsHint">Needs an <code>email</code> column; a <code>name</code> column is recommended.</span>
+          </label>
+          <label>Attachment (PDF, etc.)
+            <input type="file" name="attachment" id="attachmentFile" />
+            <span class="hint" id="attachmentHint">Max 25 MB. The same file goes to everyone.</span>
+          </label>
+        </div>
+
+        <div class="grid3">
+          <label>Batch size
+            <input name="batch_size" type="number" min="1" value="10" />
+          </label>
+          <label>Seconds between batches
+            <input name="batch_interval_seconds" type="number" min="0" value="60" />
+          </label>
+          <label>Schedule start (optional)
+            <input name="scheduled_start" type="datetime-local" id="scheduledStart" />
+          </label>
+        </div>
+        <p class="hint">Leave the schedule blank to start sending immediately. Sending runs on the server — you can close this page.</p>
+
+        <div class="row between wrap">
+          <label class="checkbox"><input type="checkbox" id="asDraft" /> Create without sending (draft)</label>
+          <button type="submit" class="btn primary" id="createBtn">Create &amp; send</button>
+        </div>
+        <p class="status" id="campaignStatus"></p>
+      </form>
+    </section>
+
+    <!-- Campaign list -->
+    <section class="card">
+      <div class="row between">
+        <h2>Sends</h2>
+        <button class="btn ghost small" id="refreshBtn">↻ Refresh</button>
+      </div>
+      <div id="campaignList" class="campaign-list"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
