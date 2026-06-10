@@ -1,0 +1,24 @@
+services:
+  mail-service:
+    build: .
+    container_name: payroll-mail-service
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      - mail-data:/data
+    environment:
+      # All of these are OPTIONAL — you can configure SMTP in the web UI instead.
+      # If set, they seed the settings on first boot.
+      - SMTP_HOST=${SMTP_HOST:-smtp.gmail.com}
+      - SMTP_PORT=${SMTP_PORT:-465}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - FROM_EMAIL=${FROM_EMAIL:-}
+      - FROM_NAME=${FROM_NAME:-}
+      - DAILY_LIMIT=${DAILY_LIMIT:-1800}
+      # Set a password to protect the UI when hosting on a public server.
+      - APP_PASSWORD=${APP_PASSWORD:-}
+
+volumes:
+  mail-data:
