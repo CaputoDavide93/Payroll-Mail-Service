@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payslips — Payroll Mail Service</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .step-card {
+      background: var(--surface, #fff);
+      border: 1px solid var(--border, #e0e0e0);
+      border-radius: 8px;
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+    }
+    .step-card h2 { margin: 0 0 1rem; font-size: 1.1rem; display: flex; align-items: center; gap: .5rem; }
+    .step-num {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 1.8rem; height: 1.8rem; border-radius: 50%;
+      background: var(--primary, #1a73e8); color: #fff;
+      font-size: .85rem; font-weight: 700; flex-shrink: 0;
+    }
+    .match-table { width: 100%; border-collapse: collapse; font-size: .875rem; margin-top: .75rem; }
+    .match-table th, .match-table td { padding: .4rem .6rem; text-align: left; border-bottom: 1px solid var(--border, #e0e0e0); }
+    .match-table th { background: var(--bg, #f5f5f5); font-weight: 600; }
+    .badge-high { color: #1a7e1a; font-weight: 600; }
+    .badge-medium { color: #b45309; font-weight: 600; }
+    .badge-low { color: #999; }
+    .warn-list { margin: .5rem 0 0; padding-left: 1.2rem; color: #b45309; font-size: .875rem; }
+    .section-label { font-size: .8rem; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; color: #666; margin: 1rem 0 .4rem; }
+    #step2, #step3 { display: none; }
+    .upload-row { display: flex; gap: 1rem; flex-wrap: wrap; }
+    .upload-col { flex: 1; min-width: 220px; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">✉️</span>
+      <div>
+        <h1>Payroll Mail Service</h1>
+        <p class="tagline">Send personalised, password-protected payslips to your whole team.</p>
+      </div>
+    </div>
+    <div class="row">
+      <a href="/" class="btn ghost">📨 Campaigns</a>
+      <button id="settingsBtn" class="btn ghost">⚙️ Settings</button>
+    </div>
+  </header>
+
+  <main class="container" style="max-width:860px">
+    <h1 style="font-size:1.4rem;margin-bottom:1.5rem">Personalised Payslip Sender</h1>
+
+    <!-- Step 1: Upload -->
+    <div class="step-card" id="step1">
+      <h2><span class="step-num">1</span> Upload files</h2>
+      <p class="muted" style="margin-bottom:1rem">Upload the employee Excel sheet and a ZIP containing all payslip PDFs. Each PDF will be matched to an employee and password-protected with their NI number.</p>
+      <div class="upload-row">
+        <div class="upload-col">
+          <label class="label">Employee Excel <small>(EENo, FullName, NI No, Email Address)</small></label>
+          <input type="file" id="excelFile" accept=".xlsx,.xls" class="input" />
+        </div>
+        <div class="upload-col">
+          <label class="label">Payslip PDFs <small>(ZIP archive)</small></label>
+          <input type="file" id="zipFile" accept=".zip" class="input" />
+        </div>
+      </div>
+      <div style="margin-top:1rem">
+        <button id="prepareBtn" class="btn primary">Prepare payslips →</button>
+        <span id="prepareStatus" class="status" style="margin-left:.75rem"></span>
+      </div>
+    </div>
+
+    <!-- Step 2: Review matches -->
+    <div class="step-card" id="step2">
+      <h2><span class="step-num">2</span> Review matches</h2>
+      <div id="matchResults"></div>
+      <div style="margin-top:1.25rem">
+        <button id="backBtn" class="btn">← Back</button>
+        <button id="sendSetupBtn" class="btn primary" style="margin-left:.5rem">Set up email →</button>
+      </div>
+    </div>
+
+    <!-- Step 3: Email setup + send -->
+    <div class="step-card" id="step3">
+      <h2><span class="step-num">3</span> Set up and send</h2>
+      <form id="sendForm">
+        <div class="form-row">
+          <label class="label" for="campaignName">Campaign name</label>
+          <input type="text" id="campaignName" class="input" value="Payslips 2025–26" required />
+        </div>
+        <div class="form-row">
+          <label class="label" for="emailSubject">Subject</label>
+          <input type="text" id="emailSubject" class="input" value="Your payslip for 2025–26 is attached" required />
+        </div>
+        <div class="form-row">
+          <label class="label" for="emailBody">Body</label>
+          <textarea id="emailBody" class="input" rows="5" required>Dear {name},
+
+Please find your payslip for 2025–26 attached. The document is password-protected — your password is your NI number.
+
+If you have any questions, please contact HR.
+
+Kind regards</textarea>
+        </div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap">
+          <div style="flex:1;min-width:160px">
+            <label class="label" for="batchSize">Batch size</label>
+            <input type="number" id="batchSize" class="input" value="10" min="1" max="100" />
+          </div>
+          <div style="flex:1;min-width:160px">
+            <label class="label" for="batchInterval">Batch interval (seconds)</label>
+            <input type="number" id="batchInterval" class="input" value="60" min="0" />
+          </div>
+        </div>
+        <div style="margin-top:1.25rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <button type="button" id="backBtn2" class="btn">← Back</button>
+          <button type="submit" id="sendBtn" class="btn primary">Send payslips</button>
+          <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer">
+            <input type="checkbox" id="asDraft" /> Save as draft (don't send yet)
+          </label>
+          <span id="sendStatus" class="status"></span>
+        </div>
+      </form>
+    </div>
+  </main>
+
+  <!-- Settings dialog (reuse same pattern as main app) -->
+  <dialog id="settingsDialog" class="card dialog">
+    <h2 style="margin:0 0 1rem">Settings</h2>
+    <form id="settingsForm" method="dialog">
+      <div class="form-row"><label class="label">SMTP host</label><input name="smtp_host" class="input" placeholder="smtp.gmail.com" /></div>
+      <div class="form-row"><label class="label">SMTP port</label><input name="smtp_port" class="input" type="number" placeholder="465" /></div>
+      <div class="form-row"><label class="label">Gmail / Workspace address</label><input name="smtp_user" class="input" type="email" /></div>
+      <div class="form-row"><label class="label">App password <span id="passHint" class="muted" style="font-weight:normal"></span></label><input name="smtp_pass" class="input" type="password" autocomplete="new-password" placeholder="Leave blank to keep existing" /></div>
+      <div class="form-row"><label class="label">From name</label><input name="from_name" class="input" /></div>
+      <div class="form-row"><label class="label">From address</label><input name="from_email" class="input" type="email" /></div>
+      <div class="form-row"><label class="label">Daily send limit</label><input name="daily_limit" class="input" type="number" /></div>
+      <div class="form-row"><label class="label">Test email</label><div style="display:flex;gap:.5rem"><input id="testTo" class="input" type="email" placeholder="your@email.com" /><button type="button" id="testBtn" class="btn small">Send test</button></div></div>
+      <p id="settingsStatus" class="status"></p>
+      <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem">
+        <button type="button" id="settingsClose" class="btn">Close</button>
+        <button type="submit" class="btn primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="loginDialog" class="card dialog" style="width:min(360px,96vw)">
+    <h2 style="margin:0 0 1rem">Sign in</h2>
+    <form id="loginForm">
+      <label class="label">Password</label>
+      <input id="loginPassword" type="password" class="input" style="margin-bottom:.75rem" autofocus />
+      <p id="loginError" class="status err"></p>
+      <button type="submit" class="btn primary" style="width:100%">Sign in</button>
+    </form>
+  </dialog>
+
+  <script src="payslips.js"></script>
+</body>
+</html>

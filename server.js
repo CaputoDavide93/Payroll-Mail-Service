@@ -14,6 +14,8 @@ import {
   campaignStats, failedRecipients, deleteCampaign, requeueFailed, firstRecipient
 } from './src/campaigns.js';
 import { startWorker, stopWorker } from './src/worker.js';
+import { preparePayslips, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { getAnthropicApiKey } from './src/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -230,6 +232,83 @@ function intField(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
+
+// ---- Payslips ----
+const payslipsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 } // 100 MB — zip archives can be large
+});
+
+// Step 1: Upload Excel + ZIP, run AI-match + protect pipeline.
+app.post('/api/payslips/prepare', payslipsUpload.fields([
+  { name: 'excel', maxCount: 1 },
+  { name: 'zip', maxCount: 1 }
+]), wrap(async (req, res) => {
+  const excelFile = req.files?.excel?.[0];
+  const zipFile = req.files?.zip?.[0];
+  if (!excelFile) throw new Error('Please upload the Excel file (employees).');
+  if (!zipFile) throw new Error('Please upload the ZIP file (PDFs).');
+
+  const apiKey = getAnthropicApiKey();
+  const outcome = await preparePayslips(excelFile.buffer, zipFile.buffer, apiKey);
+
+  // Persist results so the send step can reference them by run_id.
+  const resultFile = path.join(PAYSLIPS_DIR, outcome.run_id, 'results.json');
+  fs.writeFileSync(resultFile, JSON.stringify(outcome));
+
+  // Strip file system paths from the API response — client only needs metadata.
+  res.json({
+    run_id: outcome.run_id,
+    matched: outcome.results.map((r) => ({ email: r.email, name: r.name, filename: r.filename, confidence: r.confidence })),
+    unmatched: outcome.unmatched,
+    unmatched_files: outcome.unmatched_files,
+    protect_errors: outcome.protect_errors,
+    ai_errors: outcome.ai_errors
+  });
+}));
+
+// Step 2: Create a campaign from a prepared payslips run (per-recipient attachments).
+app.post('/api/payslips/send', wrap((req, res) => {
+  const { run_id, name, subject, body, from_name, from_email, batch_size, batch_interval_seconds, as_draft } = req.body;
+  if (!run_id) throw new Error('Missing run_id.');
+  if (!name?.trim()) throw new Error('Please give the campaign a name.');
+  if (!subject?.trim()) throw new Error('Please enter a subject line.');
+  if (!body?.trim()) throw new Error('Please write the email body.');
+
+  const resultFile = path.join(PAYSLIPS_DIR, run_id, 'results.json');
+  if (!fs.existsSync(resultFile)) throw new Error('Prepared run not found. Please re-upload files.');
+  const outcome = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+
+  if (!outcome.results || outcome.results.length === 0) {
+    throw new Error('No successfully prepared payslips in this run.');
+  }
+
+  const recipients = outcome.results.map((r) => ({
+    email: r.email,
+    name: r.name,
+    attachment_path: r.protected_path,
+    fields_json: JSON.stringify({ name: r.name, email: r.email })
+  }));
+
+  const scheduled_start = null; // payslips always start immediately
+  const status = (as_draft === 'true' || as_draft === true) ? 'draft' : 'running';
+
+  const id = createCampaign({
+    name: name.trim(),
+    subject: subject.trim(),
+    body,
+    from_name: (from_name || '').trim(),
+    from_email: (from_email || '').trim(),
+    attachment_path: null,
+    attachment_name: null,
+    batch_size: Math.max(1, intField(batch_size, 10)),
+    batch_interval_seconds: Math.max(0, intField(batch_interval_seconds, 60)),
+    scheduled_start,
+    status
+  }, recipients);
+
+  res.json({ id, accepted: recipients.length });
+}));
 
 app.use(express.static(path.join(__dirname, 'public')));
 

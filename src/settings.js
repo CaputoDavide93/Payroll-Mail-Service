@@ -6,7 +6,7 @@ export function getSettings() {
   return getStmt.get();
 }
 
-// Returns settings safe to send to the browser (password masked).
+// Returns settings safe to send to the browser (secrets masked).
 export function getPublicSettings() {
   const s = getSettings();
   return {
@@ -18,8 +18,13 @@ export function getPublicSettings() {
     from_email: s.from_email,
     from_name: s.from_name,
     daily_limit: s.daily_limit,
+    anthropic_api_key_set: !!s.anthropic_api_key,
     configured: !!(s.smtp_host && s.smtp_user && s.smtp_pass && s.from_email)
   };
+}
+
+export function getAnthropicApiKey() {
+  return getSettings().anthropic_api_key || process.env.ANTHROPIC_API_KEY || '';
 }
 
 const updateStmt = db.prepare(`
@@ -32,6 +37,7 @@ const updateStmt = db.prepare(`
     from_email = @from_email,
     from_name = @from_name,
     daily_limit = @daily_limit,
+    anthropic_api_key = @anthropic_api_key,
     updated_at = datetime('now')
   WHERE id = 1
 `);
@@ -76,11 +82,13 @@ export function updateSettings(input) {
     smtp_port,
     smtp_secure,
     smtp_user,
-    // Empty password means "keep the existing one" so the operator never has to re-type it.
     smtp_pass: input.smtp_pass ? input.smtp_pass : current.smtp_pass,
     from_email,
     from_name: input.from_name ?? current.from_name,
-    daily_limit: Math.max(1, toInt(input.daily_limit, current.daily_limit))
+    daily_limit: Math.max(1, toInt(input.daily_limit, current.daily_limit)),
+    anthropic_api_key: input.anthropic_api_key !== undefined
+      ? (input.anthropic_api_key || current.anthropic_api_key)
+      : current.anthropic_api_key
   };
   updateStmt.run(merged);
   return getPublicSettings();
@@ -100,7 +108,8 @@ export function seedFromEnv() {
       smtp_pass: env.SMTP_PASS,
       from_email: env.FROM_EMAIL || env.SMTP_USER,
       from_name: env.FROM_NAME,
-      daily_limit: env.DAILY_LIMIT
+      daily_limit: env.DAILY_LIMIT,
+      anthropic_api_key: env.ANTHROPIC_API_KEY
     });
   }
 }

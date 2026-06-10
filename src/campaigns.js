@@ -10,8 +10,8 @@ const insertCampaign = db.prepare(`
 `);
 
 const insertRecipient = db.prepare(`
-  INSERT INTO recipients (campaign_id, email, name, fields_json)
-  VALUES (@campaign_id, @email, @name, @fields_json)
+  INSERT INTO recipients (campaign_id, email, name, fields_json, attachment_path)
+  VALUES (@campaign_id, @email, @name, @fields_json, @attachment_path)
 `);
 
 // Create a campaign and its recipients atomically.
@@ -23,7 +23,8 @@ export const createCampaign = db.transaction((campaign, recipients) => {
       campaign_id: campaignId,
       email: r.email,
       name: r.name || '',
-      fields_json: JSON.stringify(r.fields || {})
+      fields_json: r.fields_json ?? JSON.stringify(r.fields || {}),
+      attachment_path: r.attachment_path || null
     });
   }
   return campaignId;

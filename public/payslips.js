@@ -1,0 +1,263 @@
+'use strict';
+
+const $ = (sel) => document.querySelector(sel);
+
+let appPassword = localStorage.getItem('appPassword') || '';
+let currentRunId = null;
+
+async function api(path, opts = {}) {
+  const headers = opts.headers || {};
+  if (appPassword) headers['x-app-password'] = appPassword;
+  const res = await fetch(path, { ...opts, headers });
+  let data = null;
+  try { data = await res.json(); } catch { /* no body */ }
+  if (res.status === 401) { promptLogin(); throw new Error('Unauthorized'); }
+  if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
+  return data;
+}
+
+function promptLogin() {
+  const dlg = $('#loginDialog');
+  if (!dlg.open) dlg.showModal();
+}
+
+$('#loginForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  appPassword = $('#loginPassword').value;
+  localStorage.setItem('appPassword', appPassword);
+  try {
+    await api('/api/settings');
+    $('#loginDialog').close();
+  } catch {
+    $('#loginError').textContent = 'Wrong password, try again.';
+  }
+});
+
+// ---- Settings ----
+$('#settingsBtn').addEventListener('click', openSettings);
+$('#settingsClose').addEventListener('click', () => $('#settingsDialog').close());
+
+async function openSettings() {
+  const s = await api('/api/settings');
+  const f = $('#settingsForm');
+  f.smtp_host.value = s.smtp_host;
+  f.smtp_port.value = String(s.smtp_port);
+  f.smtp_user.value = s.smtp_user;
+  f.from_name.value = s.from_name;
+  f.from_email.value = s.from_email;
+  f.daily_limit.value = s.daily_limit;
+  f.smtp_pass.value = '';
+  $('#passHint').textContent = s.smtp_pass_set ? 'A password is already saved — leave blank to keep it.' : '';
+  $('#settingsStatus').textContent = '';
+  $('#settingsDialog').showModal();
+}
+
+$('#settingsForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const f = $('#settingsForm');
+  const st = $('#settingsStatus');
+  try {
+    await api('/api/settings', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        smtp_host: f.smtp_host.value, smtp_port: f.smtp_port.value,
+        smtp_secure: f.smtp_port.value === '465',
+        smtp_user: f.smtp_user.value, smtp_pass: f.smtp_pass.value,
+        from_name: f.from_name.value, from_email: f.from_email.value,
+        daily_limit: f.daily_limit.value
+      })
+    });
+    st.className = 'status ok'; st.textContent = 'Saved.';
+  } catch (err) {
+    st.className = 'status err'; st.textContent = err.message;
+  }
+});
+
+$('#testBtn').addEventListener('click', async () => {
+  const to = $('#testTo').value.trim();
+  const st = $('#settingsStatus');
+  if (!to) { st.className = 'status err'; st.textContent = 'Enter a test address.'; return; }
+  st.className = 'status'; st.textContent = 'Sending…';
+  try {
+    await api('/api/settings/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
+    st.className = 'status ok'; st.textContent = `Sent to ${to}.`;
+  } catch (err) {
+    st.className = 'status err'; st.textContent = 'Test failed: ' + err.message;
+  }
+});
+
+// ---- Step navigation ----
+function showStep(n) {
+  $('#step1').style.display = n === 1 ? '' : 'none';
+  $('#step2').style.display = n === 2 ? '' : 'none';
+  $('#step3').style.display = n === 3 ? '' : 'none';
+}
+
+$('#backBtn').addEventListener('click', () => showStep(1));
+$('#backBtn2').addEventListener('click', () => showStep(2));
+$('#sendSetupBtn').addEventListener('click', () => showStep(3));
+
+// ---- DOM helpers ----
+function el(tag, cls, text) {
+  const e = document.createElement(tag);
+  if (cls) e.className = cls;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+// ---- Step 1: Prepare ----
+$('#prepareBtn').addEventListener('click', async () => {
+  const excelFile = $('#excelFile').files[0];
+  const zipFile = $('#zipFile').files[0];
+  const st = $('#prepareStatus');
+
+  if (!excelFile) { st.className = 'status err'; st.textContent = 'Please select the Excel file.'; return; }
+  if (!zipFile) { st.className = 'status err'; st.textContent = 'Please select the ZIP file.'; return; }
+
+  st.className = 'status'; st.textContent = 'Uploading and processing… this may take a moment.';
+  $('#prepareBtn').disabled = true;
+
+  try {
+    const fd = new FormData();
+    fd.append('excel', excelFile);
+    fd.append('zip', zipFile);
+    const headers = {};
+    if (appPassword) headers['x-app-password'] = appPassword;
+    const res = await fetch('/api/payslips/prepare', { method: 'POST', headers, body: fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Prepare failed.');
+
+    currentRunId = data.run_id;
+    renderMatchResults(data);
+    st.textContent = '';
+    showStep(2);
+  } catch (err) {
+    st.className = 'status err'; st.textContent = err.message;
+  } finally {
+    $('#prepareBtn').disabled = false;
+  }
+});
+
+function renderMatchResults(data) {
+  const { matched, unmatched, unmatched_files, protect_errors, ai_errors } = data;
+  const container = $('#matchResults');
+  container.textContent = '';
+
+  if (matched.length > 0) {
+    container.appendChild(el('div', 'section-label', `Matched (${matched.length}) — PDFs protected and ready`));
+    const table = el('table', 'match-table');
+    const thead = el('thead');
+    const hr = el('tr');
+    ['Employee', 'Email', 'File', 'Confidence'].forEach((t) => hr.appendChild(el('th', null, t)));
+    thead.appendChild(hr);
+    table.appendChild(thead);
+    const tbody = el('tbody');
+    for (const m of matched) {
+      const tr = el('tr');
+      tr.appendChild(el('td', null, m.name));
+      tr.appendChild(el('td', null, m.email));
+      tr.appendChild(el('td', null, m.filename));
+      const confCls = m.confidence === 'high' ? 'badge-high' : m.confidence === 'medium' ? 'badge-medium' : 'badge-low';
+      tr.appendChild(el('td', confCls, m.confidence));
+      tbody.appendChild(tr);
+    }
+    table.appendChild(tbody);
+    container.appendChild(table);
+  }
+
+  if (unmatched.length > 0) {
+    const lbl = el('div', 'section-label', `Unmatched recipients (${unmatched.length}) — will be skipped`);
+    lbl.style.color = '#b45309';
+    container.appendChild(lbl);
+    const ul = el('ul', 'warn-list');
+    for (const u of unmatched) ul.appendChild(el('li', null, `${u.name} <${u.email}>`));
+    container.appendChild(ul);
+  }
+
+  if (unmatched_files && unmatched_files.length > 0) {
+    const lbl = el('div', 'section-label', `Unmatched files (${unmatched_files.length}) — not sent`);
+    lbl.style.color = '#999';
+    container.appendChild(lbl);
+    const ul = el('ul', 'warn-list');
+    ul.style.color = '#999';
+    for (const f of unmatched_files) ul.appendChild(el('li', null, f));
+    container.appendChild(ul);
+  }
+
+  if (protect_errors && protect_errors.length > 0) {
+    const lbl = el('div', 'section-label', `Protection errors (${protect_errors.length})`);
+    lbl.style.color = '#c00';
+    container.appendChild(lbl);
+    const ul = el('ul', 'warn-list');
+    ul.style.color = '#c00';
+    for (const e of protect_errors) ul.appendChild(el('li', null, `${e.email}: ${e.error}`));
+    container.appendChild(ul);
+  }
+
+  if (ai_errors && ai_errors.length > 0) {
+    const lbl = el('div', 'section-label', 'AI matching notes');
+    lbl.style.color = '#999';
+    container.appendChild(lbl);
+    const ul = el('ul', 'warn-list');
+    ul.style.color = '#999';
+    for (const e of ai_errors) ul.appendChild(el('li', null, e));
+    container.appendChild(ul);
+  }
+
+  if (matched.length === 0) {
+    container.appendChild(el('p', 'status err', 'No payslips could be matched and protected. Check the files and try again.'));
+    $('#sendSetupBtn').disabled = true;
+  } else {
+    $('#sendSetupBtn').disabled = false;
+  }
+}
+
+// ---- Step 3: Send ----
+$('#sendForm').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  if (!currentRunId) return;
+  const st = $('#sendStatus');
+  const btn = $('#sendBtn');
+  btn.disabled = true;
+  st.className = 'status'; st.textContent = 'Creating campaign…';
+
+  try {
+    const data = await api('/api/payslips/send', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        run_id: currentRunId,
+        name: $('#campaignName').value,
+        subject: $('#emailSubject').value,
+        body: $('#emailBody').value,
+        batch_size: $('#batchSize').value,
+        batch_interval_seconds: $('#batchInterval').value,
+        as_draft: $('#asDraft').checked
+      })
+    });
+    st.className = 'status ok';
+    st.textContent = `Campaign created — ${data.accepted} payslip${data.accepted === 1 ? '' : 's'} queued. `;
+    const link = document.createElement('a');
+    link.href = '/';
+    link.textContent = 'View campaigns →';
+    st.appendChild(link);
+    currentRunId = null;
+  } catch (err) {
+    st.className = 'status err'; st.textContent = err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+// ---- Boot ----
+async function init() {
+  const cfg = await fetch('/api/config').then((r) => r.json()).catch(() => ({ authRequired: false }));
+  if (cfg.authRequired && !appPassword) { promptLogin(); return; }
+  if (cfg.authRequired) {
+    try { await api('/api/settings'); } catch { promptLogin(); return; }
+  }
+  showStep(1);
+}
+
+init();

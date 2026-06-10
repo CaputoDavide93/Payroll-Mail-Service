@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import path from 'node:path';
 import { getSettings } from './settings.js';
 
 // Build a fresh transporter from the current settings. Cheap enough to do per batch,
@@ -76,11 +77,13 @@ export async function sendOne(transport, campaign, recipient, fromHeader, toOver
     html
   };
 
-  if (campaign.attachment_path) {
-    message.attachments = [{
-      filename: campaign.attachment_name || 'attachment',
-      path: campaign.attachment_path
-    }];
+  // Per-recipient attachment takes precedence over campaign-level attachment.
+  const attachPath = recipient.attachment_path || campaign.attachment_path;
+  const attachName = recipient.attachment_path
+    ? path.basename(recipient.attachment_path)
+    : (campaign.attachment_name || 'attachment');
+  if (attachPath) {
+    message.attachments = [{ filename: attachName, path: attachPath }];
   }
 
   return transport.sendMail(message);
