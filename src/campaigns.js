@@ -44,6 +44,8 @@ export function campaignStats(campaignId) {
 
 const getCampaignStmt = db.prepare('SELECT * FROM campaigns WHERE id = ?');
 const listCampaignsStmt = db.prepare('SELECT * FROM campaigns ORDER BY id DESC');
+const allStatsStmt = db.prepare('SELECT campaign_id, status, COUNT(*) AS n FROM recipients GROUP BY campaign_id, status');
+const allFailuresStmt = db.prepare("SELECT campaign_id, email, name, error FROM recipients WHERE status='failed' ORDER BY campaign_id, id");
 
 export function getCampaign(id) {
   return getCampaignStmt.get(id);
@@ -55,11 +57,29 @@ export function firstRecipient(id) {
 }
 
 export function listCampaigns() {
-  // Failures are included here so the dashboard needs a single request, not one per campaign.
-  return listCampaignsStmt.all().map((c) => ({
+  const campaigns = listCampaignsStmt.all();
+  if (campaigns.length === 0) return [];
+
+  // Build stats and failures in 2 bulk queries instead of 2n per-campaign queries.
+  const statsMap = {};
+  for (const row of allStatsStmt.all()) {
+    if (!statsMap[row.campaign_id]) statsMap[row.campaign_id] = { total: 0, pending: 0, sent: 0, failed: 0 };
+    statsMap[row.campaign_id][row.status] = row.n;
+    statsMap[row.campaign_id].total += row.n;
+  }
+
+  const failuresMap = {};
+  for (const row of allFailuresStmt.all()) {
+    if (!failuresMap[row.campaign_id]) failuresMap[row.campaign_id] = [];
+    if (failuresMap[row.campaign_id].length < 100) {
+      failuresMap[row.campaign_id].push({ email: row.email, name: row.name, error: row.error });
+    }
+  }
+
+  return campaigns.map((c) => ({
     ...c,
-    stats: campaignStats(c.id),
-    failures: failedRecipients(c.id)
+    stats: statsMap[c.id] || { total: 0, pending: 0, sent: 0, failed: 0 },
+    failures: failuresMap[c.id] || []
   }));
 }
 

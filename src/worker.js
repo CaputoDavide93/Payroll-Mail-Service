@@ -101,6 +101,9 @@ async function tick() {
     log(`campaign ${campaign.id}: sending batch of ${batch.length}`);
 
     for (const recipient of batch) {
+      // Re-read status so a cancel during the send loop takes effect within one recipient, not one full batch.
+      const live = currentStatusStmt.get(campaign.id);
+      if (!live || live.status !== 'running') break;
       const result = await trySend(transport, campaign, recipient, fromHeader);
       if (result.ok) markSentStmt.run(recipient.id);
       else markFailedStmt.run(result.error, recipient.id);

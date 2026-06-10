@@ -89,7 +89,7 @@ export function updateSettings(input) {
 // On first boot, seed settings from environment variables if provided.
 export function seedFromEnv() {
   const s = getSettings();
-  if (s.smtp_user || s.smtp_pass) return; // already configured, don't clobber
+  if (s.smtp_user && s.smtp_pass) return; // already fully configured, don't clobber
   const env = process.env;
   if (env.SMTP_USER || env.SMTP_PASS || env.FROM_EMAIL) {
     updateSettings({

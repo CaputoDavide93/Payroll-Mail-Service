@@ -94,15 +94,18 @@ export function fromHeaderFor(campaign) {
 // Verify the SMTP connection and optionally send a test email.
 export async function sendTest(toEmail, sampleName = 'there') {
   const transport = buildTransport();
-  await transport.verify();
-  const s = getSettings();
-  const from = buildFrom(s.from_name, s.from_email || s.smtp_user);
-  await transport.sendMail({
-    from,
-    to: toEmail,
-    subject: 'Payroll Mail Service — test email',
-    text: `Hi ${sampleName},\n\nThis is a test email confirming your Payroll Mail Service is connected to Gmail/Workspace correctly.\n\nYou're ready to send.`,
-    html: `<p>Hi ${escapeHtml(sampleName)},</p><p>This is a test email confirming your <b>Payroll Mail Service</b> is connected to Gmail/Workspace correctly.</p><p>You're ready to send. 🎉</p>`
-  });
-  transport.close();
+  try {
+    await transport.verify();
+    const s = getSettings();
+    const from = buildFrom(s.from_name, s.from_email || s.smtp_user);
+    await transport.sendMail({
+      from,
+      to: toEmail,
+      subject: 'Payroll Mail Service — test email',
+      text: `Hi ${sampleName},\n\nThis is a test email confirming your Payroll Mail Service is connected to Gmail/Workspace correctly.\n\nYou're ready to send.`,
+      html: `<p>Hi ${escapeHtml(sampleName)},</p><p>This is a test email confirming your <b>Payroll Mail Service</b> is connected to Gmail/Workspace correctly.</p><p>You're ready to send. 🎉</p>`
+    });
+  } finally {
+    try { transport.close(); } catch { /* ignore */ }
+  }
 }
