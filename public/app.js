@@ -35,6 +35,10 @@ $('#loginForm').addEventListener('submit', async (e) => {
   }
 });
 
+// ---- How to dialog ----
+$('#howtoBtn').addEventListener('click', () => $('#howtoDialog').showModal());
+$('#howtoClose').addEventListener('click', () => $('#howtoDialog').close());
+
 // ---- Settings dialog ----
 const settingsDialog = $('#settingsDialog');
 $('#settingsBtn').addEventListener('click', () => openSettings());

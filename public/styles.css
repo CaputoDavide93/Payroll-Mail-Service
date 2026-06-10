@@ -109,3 +109,23 @@ dialog .card { box-shadow: none; border: none; }
 .failures { margin-top: .6rem; font-size: .8rem; color: var(--red); }
 .failures details summary { cursor: pointer; }
 .failures ul { margin: .4rem 0 0; padding-left: 1.1rem; }
+
+/* How-to dialog */
+.howto-card { width: min(680px, 96vw); max-height: 85vh; overflow-y: auto; }
+.howto-steps { display: grid; gap: 1.25rem; }
+.howto-step { display: flex; gap: 1rem; align-items: flex-start; }
+.howto-num {
+  flex-shrink: 0; width: 2rem; height: 2rem; border-radius: 50%;
+  background: var(--primary); color: #fff; font-weight: 700; font-size: .9rem;
+  display: flex; align-items: center; justify-content: center; margin-top: .1rem;
+}
+.howto-title { font-weight: 700; font-size: .95rem; margin-bottom: .35rem; }
+.howto-body { color: var(--muted); font-size: .85rem; margin: 0 0 .5rem; }
+.howto-list { margin: 0 0 .5rem; padding-left: 1.25rem; font-size: .85rem; color: var(--ink); }
+.howto-list li { margin-bottom: .3rem; }
+.howto-rec { font-size: .75rem; font-weight: 600; color: var(--green); background: #dff3ea; padding: .05rem .35rem; border-radius: 4px; }
+.howto-example {
+  font-family: monospace; font-size: .8rem; background: #f0f3fa;
+  border: 1px solid var(--line); border-radius: 6px; padding: .5rem .75rem;
+  color: var(--muted); white-space: pre; overflow-x: auto;
+}
