@@ -43,6 +43,16 @@ function passwordMatches(supplied) {
 
 // Lightweight per-IP throttle to blunt brute-force attempts.
 const failedAttempts = new Map(); // ip -> { count, until }
+
+// Sweep entries whose lockout window has expired so the map doesn't grow forever.
+function sweepFailedAttempts() {
+  const now = Date.now();
+  for (const [ip, rec] of failedAttempts) {
+    if (rec.until > 0 && rec.until <= now) failedAttempts.delete(ip);
+  }
+}
+setInterval(sweepFailedAttempts, 5 * 60 * 1000).unref();
+
 app.use('/api', (req, res, next) => {
   if (!APP_PASSWORD || req.path === '/config') return next();
   const ip = req.ip || 'unknown';
@@ -60,10 +70,12 @@ app.use('/api', (req, res, next) => {
 });
 
 // Wrap a handler so BOTH synchronous throws and rejected promises become a clean
-// JSON 400 (Promise.resolve(fn()) would miss a synchronous throw inside fn).
+// JSON error response (Promise.resolve(fn()) would miss a synchronous throw inside fn).
 const wrap = (fn) => (req, res) => Promise.resolve().then(() => fn(req, res)).catch((err) => {
   console.error(err);
-  if (!res.headersSent) res.status(400).json({ error: err.message });
+  if (res.headersSent) return;
+  const status = err.status || (err.message?.includes('not found') ? 404 : err.code ? 500 : 400);
+  res.status(status).json({ error: err.message });
 });
 
 // ---- Settings ----
@@ -109,7 +121,7 @@ app.post('/api/campaigns', upload.fields([
   let attachment_name = null;
   if (attachFile) {
     const safe = attachFile.originalname.replace(/[^\w.\-]+/g, '_');
-    const stored = `${Date.now()}_${Math.random().toString(36).slice(2, 8)}_${safe}`;
+    const stored = `${Date.now()}_${crypto.randomBytes(6).toString('hex')}_${safe}`;
     attachment_path = path.join(UPLOAD_DIR, stored);
     fs.writeFileSync(attachment_path, attachFile.buffer);
     attachment_name = attachFile.originalname;
@@ -140,7 +152,8 @@ const guard = (id) => { const c = getCampaign(id); if (!c) throw new Error('Camp
 
 app.post('/api/campaigns/:id/start', wrap((req, res) => {
   const c = guard(Number(req.params.id));
-  const status = c.scheduled_start ? 'scheduled' : 'running';
+  const future = c.scheduled_start && new Date(c.scheduled_start.replace(' ', 'T') + 'Z') > new Date();
+  const status = future ? 'scheduled' : 'running';
   setStatus(c.id, status, { next_batch_at: null });
   res.json({ ok: true, status });
 }));
@@ -196,10 +209,11 @@ app.post('/api/campaigns/:id/test', wrap(async (req, res) => {
 
 app.delete('/api/campaigns/:id', wrap((req, res) => {
   const c = getCampaign(Number(req.params.id));
-  if (c?.attachment_path && fs.existsSync(c.attachment_path)) {
+  if (!c) { const e = new Error('Campaign not found.'); e.status = 404; throw e; }
+  if (c.attachment_path && fs.existsSync(c.attachment_path)) {
     try { fs.unlinkSync(c.attachment_path); } catch { /* ignore */ }
   }
-  deleteCampaign(Number(req.params.id));
+  deleteCampaign(c.id);
   res.json({ ok: true });
 }));
 
