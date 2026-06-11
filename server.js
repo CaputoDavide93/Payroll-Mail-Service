@@ -225,10 +225,10 @@ app.post('/api/campaigns/:id/test', wrap(async (req, res) => {
 app.delete('/api/campaigns/:id', wrap((req, res) => {
   const c = getCampaign(Number(req.params.id));
   if (!c) { const e = new Error('Campaign not found.'); e.status = 404; throw e; }
-  if (c.attachment_path && fs.existsSync(c.attachment_path)) {
+  deleteCampaign(c.id); // DB first — if this throws, file is untouched
+  if (c.attachment_path) {
     try { fs.unlinkSync(c.attachment_path); } catch { /* ignore */ }
   }
-  deleteCampaign(c.id);
   res.json({ ok: true });
 }));
 
@@ -371,7 +371,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 
 const server = app.listen(PORT, () => {
   console.log(`Payroll Mail Service listening on http://localhost:${PORT}`);
-  if (APP_PASSWORD) console.log('Password protection is ENABLED.');
+  if (APP_PASSWORD) console.log('Password protection is ENABLED.')
+  else console.warn('WARNING: APP_PASSWORD is not set — the API is unprotected. Set APP_PASSWORD in production.')
   startWorker();
 });
 
