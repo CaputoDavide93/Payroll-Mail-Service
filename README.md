@@ -1,74 +1,84 @@
-# Payroll Mail Service
+<div align="center">
 
-Send a personalized email with one attachment to a large list of people
-(600+), safely in scheduled batches, through a Gmail / Google Workspace
-account.
+# ✉️ Payroll Mail Service
 
-The sending happens **on the server in the background**, so once you press
-*Create & send* you can **close the browser or shut your laptop's browser
-tab** — it keeps going. If the server restarts or crashes mid-send, it
-**picks up exactly where it left off** (no skipped or duplicated emails).
+> **Send personalised, password-protected payslips to your whole team — safely, in batches, from a single page**
 
-It's built for a non-technical operator: one simple page to upload your
-list, attach the PDF, write the greeting, and watch a progress bar.
+![Node.js](https://img.shields.io/badge/Node.js-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
 
----
+[Features](#-features) • [Quick Start](#-quick-start) • [Payslips](#-personalised-payslip-sender) • [Configuration](#️-configuration) • [How It Works](#-how-it-works) • [Troubleshooting](#-troubleshooting)
 
-## What it does
-
-- 📋 Upload recipients from a **CSV** (an `email` column is required; a
-  `name` column is recommended).
-- ✍️ Write the email once and personalize it with `{name}` (or any other
-  CSV column, e.g. `{department}`).
-- 📎 Attach **one file** (PDF, etc.) that goes to everyone — up to 25 MB.
-- 🐢 Send in **batches** (default 10 at a time) with a configurable pause
-  between batches, so you never hammer the mail server.
-- ⏰ **Schedule** a start time, or send immediately.
-- 🛟 Stays under a **daily send limit** so you don't trip Gmail's caps.
-- 📊 Live **dashboard**: sent / pending / failed, with pause, resume, stop,
-  and **retry-failed**.
-
-> **Sending limits:** Google Workspace allows roughly **2,000 recipients/day**,
-> so all 600 send comfortably in one run. A free `@gmail.com` account is
-> capped at ~**500/day** — keep the daily limit at 500 and the service will
-> automatically pause and finish the rest the next day.
+</div>
 
 ---
 
-## 1. One-time Gmail / Workspace setup (App Password)
+## ✨ Features
 
-You need an **App Password** (a 16-character password just for this app).
-This requires 2-Step Verification to be on.
-
-1. Turn on **2-Step Verification**: <https://myaccount.google.com/signinoptions/twosv>
-2. Create an App Password: <https://myaccount.google.com/apppasswords>
-   - Name it e.g. *Payroll Mail Service* and click **Create**.
-   - Copy the 16-character password it shows (spaces don't matter).
-3. You'll paste this into the app's **Settings** screen later.
-
-*(Workspace admins: make sure "Less secure app access" isn't required — App
-Passwords work as long as 2-Step Verification is enabled for the account.)*
+| Feature | Description |
+|---------|-------------|
+| 📋 **CSV Recipients** | Upload any CSV with an `email` column — extra columns become template variables |
+| ✍️ **Personalisation** | Use `{name}`, `{department}`, or any CSV column in subject and body |
+| 📎 **Attachment** | Attach one file (PDF, etc.) up to 25 MB — same file goes to everyone |
+| 🐢 **Batched Sending** | Configurable batch size + pause between batches — never hammers the mail server |
+| ⏰ **Scheduling** | Set a future start time or send immediately |
+| 🛟 **Daily Cap** | Rolling 24-hour send limit keeps you inside Gmail / Workspace quotas |
+| 🔁 **Crash-Safe Resume** | SQLite-backed — restarts pick up exactly where they left off |
+| 📊 **Live Dashboard** | Sent / pending / failed counts, progress bar, pause / resume / stop / retry |
+| 🔒 **UI Password** | Optional `APP_PASSWORD` locks the web UI for cloud deployments |
+| 📋 **Payslip Sender** | AI-matched, NI-password-protected, per-recipient PDF payslips |
 
 ---
 
-## 2. Run it
+## 📋 Prerequisites
 
-You only need [Docker](https://www.docker.com/products/docker-desktop/)
-installed. The same command works on your laptop or any cloud server.
+| Requirement | Version |
+|-------------|---------|
+| Docker | 20+ (recommended) |
+| Node.js | 20+ (without Docker) |
+| Gmail / Workspace | App Password required |
+
+### Gmail Sending Limits
+
+| Account Type | Daily Limit |
+|---|---|
+| Google Workspace | ~2,000 recipients/day |
+| Free @gmail.com | ~500 recipients/day |
+
+---
+
+## 🚀 Quick Start
+
+### 1. Clone the Repository
 
 ```bash
-# from the project folder
+git clone https://github.com/CaputoDavide93/Payroll-Mail-Service.git
+cd Payroll-Mail-Service
+```
+
+### 2. Configure Environment (optional)
+
+```bash
+cp .env.example .env
+# Edit .env with your SMTP credentials and a strong APP_PASSWORD
+```
+
+### 3. Run with Docker
+
+```bash
 docker compose up -d --build
 ```
 
-Then open **<http://localhost:3000>** in your browser.
+### 4. Open the App
 
-To stop it: `docker compose down`. Your data (settings, campaigns, progress)
-is kept in a Docker volume, so it survives restarts and upgrades.
+Navigate to **http://localhost:3000** and click **⚙️ Settings** to enter your Gmail App Password.
 
-### Run without Docker (alternative)
+To stop: `docker compose down` — your data survives in the `mail-data` Docker volume.
 
-Requires Node.js 20+.
+### Run Without Docker
 
 ```bash
 npm install
@@ -78,33 +88,19 @@ npm start
 
 ---
 
-## 3. Use it
+## 📧 Sending Campaigns
 
-1. Click **⚙️ Settings** (it opens automatically the first time):
-   - Enter your Gmail/Workspace address and the **App Password**.
-   - Set **From name** (what recipients see, e.g. *Payroll Team*).
-   - Click **Save settings**, then **Send test** to your own address to
-     confirm it works.
-2. Fill in **New send**:
-   - Campaign name, subject, and body (use `{name}` where the greeting goes).
-   - Upload your recipients **CSV** and the **attachment**.
-   - Set the **batch size** (10 is a safe default) and the **seconds between
-     batches** (60 is gentle).
-   - Optionally set a **schedule start** time. Leave blank to start now.
-   - Tip: tick **"Create without sending (draft)"** if you want to preview
-     before it goes out.
-3. Click **Create & send**. Watch the progress bar in **Sends**.
-   You can now close the page — sending continues on the server.
-4. **Preview before the blast:** on any send in the list, click **Send
-   preview** to email yourself the *real* message — rendered greeting and the
-   attachment — using the first recipient's data as the sample. This is the
-   best way to catch a wrong `{placeholder}` or a missing attachment before it
-   reaches 600 people.
+### 1. One-Time Gmail Setup (App Password)
 
-You can **pause**, **resume**, **stop**, or **retry failed** recipients at any
-time from the **Sends** list.
+> App Passwords require **2-Step Verification** to be enabled on your Google account.
 
-### Recipients CSV format
+1. Enable 2-Step Verification: https://myaccount.google.com/signinoptions/twosv
+2. Create an App Password: https://myaccount.google.com/apppasswords
+   - Name it *Payroll Mail Service* → **Create**
+   - Copy the 16-character password shown
+3. Paste it into **⚙️ Settings** in the app
+
+### 2. Prepare Your Recipients CSV
 
 ```csv
 name,email,department
@@ -112,167 +108,250 @@ Alice Smith,alice@example.com,Engineering
 Bob Jones,bob@example.com,Finance
 ```
 
-- `email` is required. `name` is matched case-insensitively (also accepts
-  `first name`, `full name`, etc.).
-- Any extra column (like `department`) can be used in the email as
-  `{department}`.
-- Invalid or duplicate emails are skipped automatically and reported back.
+- `email` is required; `name` is recommended
+- Any extra column (`department`, `location`, etc.) can be used as `{department}` in the email
+- Duplicate or invalid emails are skipped and reported
 
 A ready-to-edit `sample-recipients.csv` is included.
 
----
+### 3. Create and Send
 
-## Deliverability — staying out of spam
+1. Fill in **New send**: campaign name, subject, body (use `{name}` for the greeting)
+2. Upload your **CSV** and optional **attachment** (PDF, etc., up to 25 MB)
+3. Set **batch size** (10 is safe) and **interval** (60 s is gentle)
+4. Optionally set a **schedule start** time, or tick **"Create without sending (draft)"**
+5. Click **Create & send** — you can close the browser, sending continues on the server
 
-Sending 600 near-identical emails with the same attachment is exactly the
-pattern spam filters watch for. Because you're on **Google Workspace with your
-own domain**, the single biggest factor is your domain's email authentication.
-Work through this once with whoever manages your DNS:
-
-- [ ] **SPF** — a TXT record on your domain authorizing Google to send:
-      `v=spf1 include:_spf.google.com ~all`
-- [ ] **DKIM** — turn it on in the Google Admin console
-      (*Apps → Google Workspace → Gmail → Authenticate email*) and publish the
-      key Google gives you. This is the most important one.
-- [ ] **DMARC** — a TXT record at `_dmarc.yourdomain.com`, start gentle:
-      `v=DMARC1; p=none; rua=mailto:you@yourdomain.com`
-- [ ] **Send the preview to a Gmail *and* an Outlook address** and confirm both
-      land in the inbox, not spam.
-- [ ] Keep the **From address on the same domain** as your DKIM/SPF (don't send
-      "as" an outside address).
-- [ ] Make sure the body has **real text** (not just an image), a clear subject,
-      and ideally an unsubscribe/contact line — payroll mail is expected, but
-      it still helps your domain reputation.
-- [ ] First time at volume? **Warm up gently** — the default 10-per-batch with a
-      60s gap spreads ~600 over ~1 hour, which looks far more natural than a
-      burst.
-- [ ] Clean the list — bounces from dead addresses hurt your reputation. The app
-      reports failures so you can prune them.
-
-If mail still lands in spam after DKIM/SPF/DMARC are green, it's almost always
-the domain's sending reputation (new domain, or prior bulk sending) rather than
-this app.
+Use **Send preview** on any campaign to email yourself the rendered message with the real attachment before it goes to 600 people.
 
 ---
 
-## Hosting on a cloud server (so it runs 24/7)
+## 📋 Personalised Payslip Sender
 
-The app is a single container — deploy it anywhere that runs Docker. Because it
-runs on the server, you can close your laptop entirely and the batches keep
-sending on schedule.
+A dedicated workflow for sending each employee their own password-protected PDF payslip.
 
-**General steps (any host — Render, Fly.io, DigitalOcean, a VM):**
+### How It Works
 
-1. Copy the project to the server and run `docker compose up -d --build`.
-2. **Protect the UI** by setting `APP_PASSWORD` (see below) — essential on a
-   public server, since anyone who reaches the page could send email as you.
-3. Put it behind **HTTPS** (your host's load balancer, or a reverse proxy like
-   Caddy/Nginx) if it's internet-facing.
+| Step | What Happens |
+|------|-------------|
+| **1. Upload** | Upload the employee Excel file + a ZIP of all payslip PDFs |
+| **2. AI Match** | Claude AI + fuzzy matching pairs each PDF to the right employee by name |
+| **3. Protect** | Each PDF is encrypted with the employee's NI number as the password (256-bit AES via `qpdf`) |
+| **4. Pre-flight** | Optional AI review flags suspicious pairings before a single email is sent |
+| **5. Send** | A per-recipient campaign is created — each person gets only their own payslip |
+| **6. Cleanup** | Delete all PDFs and match data from the server when done |
 
-### Concrete example: AWS EC2 (free-tier eligible)
+### Excel Format
 
-1. **Launch an instance:** EC2 → *Launch instance* → Amazon Linux 2023,
-   `t3.micro` (or `t2.micro`). Create/download a key pair.
-2. **Security group:** allow inbound **22** (SSH, ideally only from your IP) and
-   **443** (HTTPS). Leave the app's port 3000 closed to the world — you'll reach
-   it via a proxy on 443, or via an SSH tunnel.
-3. **Connect and install Docker:**
-   ```bash
-   ssh -i your-key.pem ec2-user@<public-ip>
-   sudo dnf update -y && sudo dnf install -y docker git
-   sudo systemctl enable --now docker
-   sudo usermod -aG docker ec2-user   # then log out/in so `docker` works without sudo
-   ```
-4. **Get the app and configure it:**
-   ```bash
-   git clone <your-repo-url> payroll-mail && cd payroll-mail
-   cp .env.example .env
-   nano .env          # set SMTP_USER, SMTP_PASS (App Password), FROM_EMAIL,
-                      # FROM_NAME, and a strong APP_PASSWORD
-   docker compose up -d --build
-   ```
-5. **Reach the UI safely.** Simplest for a single user — an SSH tunnel from your
-   laptop (no public port, no proxy needed):
-   ```bash
-   ssh -i your-key.pem -L 3000:localhost:3000 ec2-user@<public-ip>
-   # now open http://localhost:3000 on your laptop
-   ```
-   For team access instead, run a reverse proxy (Caddy gives you automatic
-   HTTPS with a one-line config) on 443 in front of port 3000.
-6. The container has `restart: unless-stopped`, so it comes back automatically
-   if the instance reboots. Your data lives in the `mail-data` Docker volume.
+| Column | Notes |
+|--------|-------|
+| `EENo` | Employee number |
+| `FullName` | Used for PDF matching |
+| `NI No` | Used as the PDF password — never stored or logged |
+| `Email Address` | Delivery address |
 
-> The app stores its database and attachments in a Docker volume, so
-> `docker compose down && docker compose up -d` (e.g. to upgrade) keeps all your
-> campaigns and progress.
+### Security Notes
+
+- NI numbers are **never** stored, logged, or returned by any API — used only at the moment of PDF encryption
+- Raw (unprotected) PDFs are deleted from disk as soon as protection completes
+- Set `ANTHROPIC_API_KEY` as an environment variable — it is not entered via the UI
+
+### Navigate to Payslips
+
+Click **📋 Payslips** in the top navigation bar of the app.
 
 ---
 
-## Configuration (optional environment variables)
+## ⚙️ Configuration
 
-Everything can be set in the **Settings** screen, but you can also seed it
-via environment variables. Copy `.env.example` to `.env` and fill it in;
-`docker compose` reads it automatically.
+Set in **⚙️ Settings** in the UI, or seed via environment variables. Copy `.env.example` to `.env` — Docker Compose reads it automatically.
 
 | Variable | Purpose | Default |
-|---|---|---|
-| `SMTP_HOST` | Mail server | `smtp.gmail.com` |
+|----------|---------|---------|
+| `SMTP_HOST` | Mail server hostname | `smtp.gmail.com` |
 | `SMTP_PORT` | `465` (SSL) or `587` (STARTTLS) | `465` |
-| `SMTP_USER` | Gmail/Workspace login address | – |
-| `SMTP_PASS` | **App Password** | – |
+| `SMTP_USER` | Gmail / Workspace login address | – |
+| `SMTP_PASS` | App Password | – |
 | `FROM_EMAIL` | Address shown as sender | `SMTP_USER` |
 | `FROM_NAME` | Name shown as sender | – |
-| `DAILY_LIMIT` | Max emails per rolling 24h | `1800` |
-| `APP_PASSWORD` | Protect the web UI (recommended for cloud) | – (off) |
+| `DAILY_LIMIT` | Max emails per rolling 24 h | `1800` |
+| `APP_PASSWORD` | Locks the web UI (recommended on cloud) | – (off) |
+| `ANTHROPIC_API_KEY` | Enables AI matching + pre-flight check for payslips | – (off) |
 | `PORT` | Port to serve on | `3000` |
-| `DATA_DIR` | Where the database + uploads live | `data` (`/data` in Docker) |
+| `DATA_DIR` | Database + uploads location | `data` (`/data` in Docker) |
 
 ---
 
-## How it works (for the curious)
+## 🌐 Hosting on a Cloud Server
+
+The app is a single container — deploy it anywhere Docker runs. Close your laptop and batches keep sending on schedule.
+
+### AWS EC2 (Free-Tier Eligible)
+
+```bash
+# 1. Launch Amazon Linux 2023, t3.micro, allow inbound 22 + 443
+
+# 2. Connect and install Docker
+ssh -i your-key.pem ec2-user@<public-ip>
+sudo dnf update -y && sudo dnf install -y docker git
+sudo systemctl enable --now docker
+sudo usermod -aG docker ec2-user   # log out/in after this
+
+# 3. Deploy the app
+git clone https://github.com/CaputoDavide93/Payroll-Mail-Service.git payroll-mail
+cd payroll-mail
+cp .env.example .env
+nano .env   # set SMTP_USER, SMTP_PASS, FROM_EMAIL, FROM_NAME, APP_PASSWORD
+docker compose up -d --build
+```
+
+**Access via SSH tunnel** (simplest — no public port needed):
+
+```bash
+ssh -i your-key.pem -L 3000:localhost:3000 ec2-user@<public-ip>
+# open http://localhost:3000 on your laptop
+```
+
+For team access, put Caddy or Nginx in front on port 443 for automatic HTTPS.
+
+---
+
+## 📬 Deliverability — Staying Out of Spam
+
+Sending hundreds of near-identical emails is exactly what spam filters watch for. Work through this checklist once with whoever manages your DNS:
+
+- [ ] **SPF** — TXT record authorising Google to send: `v=spf1 include:_spf.google.com ~all`
+- [ ] **DKIM** — enable in Google Admin (*Apps → Gmail → Authenticate email*) and publish the key
+- [ ] **DMARC** — start gentle: `v=DMARC1; p=none; rua=mailto:you@yourdomain.com`
+- [ ] **Test first** — send a preview to a Gmail *and* an Outlook address before the full blast
+- [ ] **Keep From on your domain** — don't send "as" an outside address
+- [ ] **Real text in the body** — not just an image; include a contact or unsubscribe line
+- [ ] **Warm up gently** — default 10-per-batch with 60 s gap spreads 600 over ~1 hour
+
+---
+
+## 🔍 How It Works
 
 - **Backend:** Node.js + Express. SMTP via `nodemailer`.
-- **State:** a single SQLite file (`better-sqlite3`) under `DATA_DIR` holds
-  settings, campaigns, and every recipient's status. This is what makes
-  restarts safe.
-- **Worker:** a background loop wakes every 2 seconds, promotes scheduled
-  campaigns whose time has come, sends the next batch for any *running*
-  campaign (respecting the between-batch pause and the daily limit), retries
-  each failed send up to 3 times, and marks the campaign *completed* when the
-  queue is empty. Closing the UI doesn't touch it.
-- **Frontend:** one static HTML/CSS/JS page — no build step.
-- On shutdown (`docker compose down`, reboot) the worker finishes its current
-  batch before exiting, so a send isn't cut off mid-flight.
+- **State:** Single SQLite file (`better-sqlite3`) under `DATA_DIR` holds settings, campaigns, and every recipient's status — what makes crash-safe resume possible.
+- **Worker:** Background loop wakes every 2 s, promotes scheduled campaigns, sends the next batch (respecting the pause and daily cap), retries each failed send up to 3 times, and marks the campaign *completed* when the queue is empty.
+- **Atomic claim:** Before sending a batch, recipients are marked `sending` in a single transaction — a crash can't cause double-sends; the startup hook resets `sending → pending`.
+- **Payslips:** AI + fuzzy name matching, `qpdf` 256-bit AES encryption, raw PDFs deleted immediately after protection, NI numbers never persisted.
+- **Frontend:** Static HTML/CSS/JS — no build step.
 
-## Notes & limitations
+---
 
-- **Delivery is "at least once."** A recipient is marked *sent* only after the
-  mail server accepts it. If the process is killed in the rare window between
-  the server accepting a message and that status being saved, that one
-  recipient could get the email twice on restart. This is deliberate — for
-  payroll, a duplicate is far less harmful than someone silently *not*
-  receiving their payslip. The graceful-shutdown handler keeps this window tiny.
-- **The App Password is stored in the SQLite database** (under `DATA_DIR`) so
-  the service can keep sending unattended. Treat that volume as a secret:
-  restrict access to the server, and rotate the App Password in your Google
-  account if it's ever exposed.
-- **Five wrong UI-password attempts** from one address triggers a one-minute
-  lockout for that address — a deliberate brute-force speed bump.
-- **One attachment per send**, up to 25 MB (Gmail's limit). The same file goes
-  to everyone.
-- **Daily limit is a rolling 24-hour window**, not a calendar day — set it to
-  match your account (Workspace ~2000, free Gmail ~500).
-
-## Project layout
+## 📁 Project Layout
 
 ```
 server.js                 Express app + API routes
-src/db.js                 SQLite schema
-src/settings.js           SMTP settings (with env seeding)
+src/db.js                 SQLite schema + migrations
+src/settings.js           SMTP settings (env seeding, secret masking)
 src/mailer.js             Transport, template rendering, sending
 src/parseRecipients.js    CSV parsing & validation
-src/campaigns.js          Campaign/recipient queries
+src/campaigns.js          Campaign / recipient queries
 src/worker.js             Background batch-sending loop
-public/                   The web UI
-Dockerfile, docker-compose.yml
+src/preparePayslips.js    Payslip pipeline (match → protect → manage)
+src/matchAttachments.js   AI + fuzzy PDF-to-employee matching
+public/                   Web UI (campaigns + payslips pages)
+Dockerfile
+docker-compose.yml
+.env.example
 ```
+
+---
+
+## ⚠️ Notes & Limitations
+
+- **Delivery is "at least once."** A recipient is marked *sent* only after the mail server accepts it. If the process is killed in the tiny window between acceptance and the DB write, that one recipient may get the email twice on restart. For payroll, a duplicate is far less harmful than a missed payslip.
+- **App Password stored in SQLite** under `DATA_DIR`. Treat that volume as a secret and rotate the password in your Google account if it's ever exposed.
+- **Five wrong UI-password attempts** from one IP triggers a one-minute lockout.
+- **One attachment per standard campaign**, up to 25 MB. Payslips use per-recipient attachments with no size limit beyond disk space.
+- **Daily limit is a rolling 24-hour window**, not a calendar day.
+
+---
+
+## 🐛 Troubleshooting
+
+<details>
+<summary>❌ Emails not sending — "Missing SMTP configuration"</summary>
+
+Open **⚙️ Settings**, fill in all SMTP fields, and click **Save**. Then use **Send test** to confirm the connection works before creating a campaign.
+</details>
+
+<details>
+<summary>❌ Test email goes to spam</summary>
+
+Check SPF, DKIM, and DMARC are configured on your domain (see [Deliverability](#-deliverability--staying-out-of-spam)). DKIM is the most important one.
+</details>
+
+<details>
+<summary>❌ Payslip preparation fails — "qpdf is not installed"</summary>
+
+`qpdf` is included in the Docker image. If running without Docker, install it:
+
+```bash
+# Debian / Ubuntu
+sudo apt install qpdf
+
+# macOS
+brew install qpdf
+```
+</details>
+
+<details>
+<summary>❌ No AI matching — payslips only use fuzzy match</summary>
+
+Set the `ANTHROPIC_API_KEY` environment variable in your `.env` file and rebuild the container. The key is not configurable via the UI.
+</details>
+
+<details>
+<summary>❌ Container starts but UI shows a blank page</summary>
+
+```bash
+docker logs payroll-mail-service
+```
+
+Check for port conflicts (something else on 3000) or missing env vars.
+</details>
+
+<details>
+<summary>❌ Data lost after docker compose down</summary>
+
+Data lives in the `mail-data` Docker volume. `docker compose down` preserves it. Only `docker compose down -v` removes it.
+</details>
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please open an issue first to discuss large changes.
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
+
+---
+
+<div align="center">
+
+## 👤 Author
+
+**Davide Caputo**
+
+[![GitHub](https://img.shields.io/badge/GitHub-CaputoDavide93-181717?style=for-the-badge&logo=github)](https://github.com/CaputoDavide93)
+[![Email](https://img.shields.io/badge/Email-Davide.Caputo%40createfuture.com-EA4335?style=for-the-badge&logo=gmail&logoColor=white)](mailto:Davide.Caputo@createfuture.com)
+
+---
+
+⭐ **If this tool helped you, please give it a star!** ⭐
+
+</div>
