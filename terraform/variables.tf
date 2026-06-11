@@ -27,8 +27,6 @@ variable "root_volume_size_gb" {
   default = 20
 }
 
-# SSH access — restrict to your IP in production.
-# Find your current IP: curl -s https://checkip.amazonaws.com
 variable "ssh_cidr" {
   type        = string
   default     = "0.0.0.0/0"
@@ -42,15 +40,17 @@ variable "git_repo_url" {
 
 variable "git_branch" {
   type    = string
-  default = "main"
+  default = "claude/bulk-email-service-na4el4"
 }
 
-# ---- Secrets — set via TF_VAR_* env vars, never commit values ----
+# ---- Secrets ----------------------------------------------------------------
+# Leave empty here — fill them in via AWS Secrets Manager console after apply.
+# The EC2 instance waits at boot until real values are present before starting.
 
 variable "app_password" {
-  type        = string
-  sensitive   = true
-  description = "Password that protects the web UI. Required on a public server."
+  type      = string
+  sensitive = true
+  default   = ""
 }
 
 variable "smtp_host" {
@@ -64,26 +64,26 @@ variable "smtp_port" {
 }
 
 variable "smtp_user" {
-  type        = string
-  sensitive   = true
-  description = "Gmail / Workspace address used for sending."
+  type      = string
+  sensitive = true
+  default   = ""
 }
 
 variable "smtp_pass" {
-  type        = string
-  sensitive   = true
-  description = "Gmail App Password (16 characters)."
+  type      = string
+  sensitive = true
+  default   = ""
 }
 
 variable "from_email" {
-  type        = string
-  sensitive   = true
-  description = "Address shown as the sender (usually same as smtp_user)."
+  type      = string
+  sensitive = true
+  default   = ""
 }
 
 variable "from_name" {
-  type        = string
-  default     = "Payroll Team"
+  type    = string
+  default = "Payroll Team"
 }
 
 variable "daily_limit" {
@@ -92,8 +92,7 @@ variable "daily_limit" {
 }
 
 variable "anthropic_api_key" {
-  type        = string
-  sensitive   = true
-  default     = ""
-  description = "Enables AI matching and pre-flight check for payslips. Optional."
+  type      = string
+  sensitive = true
+  default   = ""
 }

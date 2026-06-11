@@ -29,7 +29,7 @@ resource "local_sensitive_file" "private_key" {
 
 resource "aws_security_group" "this" {
   name        = "payroll-mail-service-${var.environment}"
-  description = "Payroll Mail Service — SSH + app HTTP"
+  description = "Payroll Mail Service - SSH + app HTTP"
 
   ingress {
     description = "SSH"
@@ -44,7 +44,7 @@ resource "aws_security_group" "this" {
     from_port   = 3000
     to_port     = 3000
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    cidr_blocks = [var.ssh_cidr]
   }
 
   egress {
@@ -108,6 +108,7 @@ resource "aws_instance" "this" {
     git_branch   = var.git_branch
     secret_arn   = aws_secretsmanager_secret.app_config.arn
     aws_region   = var.aws_region
+    environment  = var.environment
   })
 
   user_data_replace_on_change = false
