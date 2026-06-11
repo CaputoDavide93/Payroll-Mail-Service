@@ -3,7 +3,7 @@
 const $ = (sel) => document.querySelector(sel);
 
 // ---- API helper with optional password header ----
-let appPassword = localStorage.getItem('appPassword') || '';
+let appPassword = sessionStorage.getItem('appPassword') || '';
 
 async function api(path, opts = {}) {
   const headers = opts.headers || {};
@@ -25,7 +25,7 @@ function promptLogin() {
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
   appPassword = $('#loginPassword').value;
-  localStorage.setItem('appPassword', appPassword);
+  sessionStorage.setItem('appPassword', appPassword);
   try {
     await api('/api/settings');
     $('#loginDialog').close();
@@ -175,7 +175,7 @@ function renderCampaign(c) {
   const sentPct = s.total ? (s.sent / s.total) * 100 : 0;
   const failPct = s.total ? (s.failed / s.total) * 100 : 0;
   const sched = c.scheduled_start && c.status === 'scheduled' ? ` · starts ${fmt(c.scheduled_start)}` : '';
-  const attach = c.attachment_name ? ` · 📎 ${c.attachment_name}` : '';
+  const attach = c.attachment_name ? ` · 📎 ${esc(c.attachment_name)}` : '';
   const failures = (c.failures && c.failures.length)
     ? `<div class="failures"><details><summary>${c.failures.length} failed — view</summary><ul>${
         c.failures.slice(0, 50).map((f) => `<li>${esc(f.email)}: ${esc(f.error || 'error')}</li>`).join('')
@@ -188,7 +188,7 @@ function renderCampaign(c) {
           <div class="title">${esc(c.name)}</div>
           <div class="sub">${esc(c.subject)}${attach}${sched}</div>
         </div>
-        <span class="badge ${c.status}">${c.status}</span>
+        <span class="badge ${esc(c.status)}">${esc(c.status)}</span>
       </div>
       <div class="bar">
         <div class="seg-sent" style="width:${sentPct}%"></div>
@@ -223,7 +223,13 @@ async function loadCampaigns() {
     lastSig = sig;
     el.innerHTML = list.map(renderCampaign).join('');
   } catch (err) {
-    if (err.message !== 'Unauthorized') $('#campaignList').innerHTML = `<p class="error">${esc(err.message)}</p>`;
+    lastSig = ''; // force re-render on recovery after server outage
+    if (err.message !== 'Unauthorized') {
+      const p = document.createElement('p');
+      p.className = 'error';
+      p.textContent = err.message;
+      $('#campaignList').replaceChildren(p);
+    }
   }
 }
 

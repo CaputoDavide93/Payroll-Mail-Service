@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import AdmZip from 'adm-zip';
@@ -21,8 +22,8 @@ async function assertQpdf() {
   }
 }
 
-// Only safe filename characters allowed from ZIP entries.
-const SAFE_FILENAME_RE = /^[\w.\- ]+\.pdf$/i;
+// Must start with a word char (prevents dot-leading filenames like .hidden.pdf).
+const SAFE_FILENAME_RE = /^[\w][\w. -]*\.pdf$/i;
 
 export function parseExcel(buffer) {
   const wb = XLSX.read(buffer, { type: 'buffer' });
@@ -47,12 +48,15 @@ export function extractZip(buffer, destFolder) {
   fs.mkdirSync(destFolder, { recursive: true });
   const zip = new AdmZip(buffer);
   const extracted = [];
+  const seen = new Set();
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
     if (path.extname(entry.entryName).toLowerCase() !== '.pdf') continue;
     const safeName = path.basename(entry.entryName);
-    // Skip entries with unsafe characters to prevent path traversal / filesystem issues
     if (!SAFE_FILENAME_RE.test(safeName)) continue;
+    const key = safeName.toLowerCase();
+    if (seen.has(key)) throw new Error(`Duplicate PDF filename in ZIP: ${safeName}`);
+    seen.add(key);
     const outPath = path.join(destFolder, safeName);
     fs.writeFileSync(outPath, entry.getData());
     extracted.push(safeName);
@@ -69,25 +73,39 @@ export async function protectPdf(inputPath, outputPath, password) {
       outputPath
     ]);
   } catch {
-    // Don't propagate qpdf's raw error — argv contains the password
+    // Don't propagate qpdf's raw error — argv contains the password.
+    // Remove any partial output file qpdf may have created before throwing.
+    try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
     throw new Error('PDF protection failed (qpdf error).');
   }
 }
 
+const PREFLIGHT_BATCH_SIZE = 100;
+
 /**
  * AI pre-flight check: review matches for suspicious pairings before sending.
- * Returns { issues: [{email, name, filename, severity, message}], all_clear }
+ * Batches inputs so large payrolls don't exceed token limits.
+ * Returns { issues, all_clear, summary, skipped? }
  */
 export async function preflightCheck(results) {
   const apiKey = getAnthropicApiKey();
   if (!apiKey) return { issues: [], all_clear: true, skipped: true };
 
-  const prompt = `You are a payroll compliance reviewer doing a final pre-send check.
+  const allIssues = [];
+  let allClear = true;
+  const summaries = [];
+
+  for (let i = 0; i < results.length; i += PREFLIGHT_BATCH_SIZE) {
+    const batch = results.slice(i, i + PREFLIGHT_BATCH_SIZE);
+    const batchNum = Math.floor(i / PREFLIGHT_BATCH_SIZE) + 1;
+    const totalBatches = Math.ceil(results.length / PREFLIGHT_BATCH_SIZE);
+
+    const prompt = `You are a payroll compliance reviewer doing a final pre-send check.${totalBatches > 1 ? ` (Batch ${batchNum} of ${totalBatches})` : ''}
 
 Below are payslip file assignments — each employee is matched to a PDF file that will be password-protected with their NI number and emailed to them.
 
 Assignments:
-${JSON.stringify(results.map((r) => ({ email: r.email, name: r.name, filename: r.filename, confidence: r.confidence })), null, 2)}
+${JSON.stringify(batch.map((r) => ({ email: r.email, name: r.name, filename: r.filename, confidence: r.confidence })), null, 2)}
 
 Review for potential errors:
 - Does the filename plausibly correspond to the person's name?
@@ -102,31 +120,43 @@ Return ONLY a JSON object — no markdown, no explanation:
 
 If no issues found: {"issues":[],"all_clear":true,"summary":"All assignments look correct."}`;
 
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'x-api-key': apiKey,
-      'anthropic-version': '2023-06-01',
-      'content-type': 'application/json'
-    },
-    body: JSON.stringify({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 2048,
-      messages: [{ role: 'user', content: prompt }]
-    })
-  });
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+        'content-type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2048,
+        messages: [{ role: 'user', content: prompt }]
+      })
+    });
 
-  if (!res.ok) throw new Error(`Claude API error ${res.status}`);
+    if (!res.ok) throw new Error(`Claude API error ${res.status}`);
 
-  const data = await res.json();
-  const text = data.content?.[0]?.text || '';
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) throw new Error('Claude returned no JSON in pre-flight response.');
-  try {
-    return JSON.parse(jsonMatch[0]);
-  } catch {
-    throw new Error('Claude returned malformed JSON in pre-flight response.');
+    const data = await res.json();
+    const text = data.content?.[0]?.text || '';
+    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('Claude returned no JSON in pre-flight response.');
+    let parsed;
+    try {
+      parsed = JSON.parse(jsonMatch[0]);
+    } catch {
+      throw new Error('Claude returned malformed JSON in pre-flight response.');
+    }
+
+    if (parsed.issues?.length) allIssues.push(...parsed.issues);
+    if (!parsed.all_clear) allClear = false;
+    if (parsed.summary) summaries.push(parsed.summary);
   }
+
+  return {
+    issues: allIssues,
+    all_clear: allClear,
+    summary: summaries.join(' ')
+  };
 }
 
 /**
@@ -136,64 +166,71 @@ If no issues found: {"issues":[],"all_clear":true,"summary":"All assignments loo
 export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
   await assertQpdf();
 
-  const runId = Date.now().toString(36);
+  // Collision-resistant run ID: timestamp + 4 random bytes
+  const runId = Date.now().toString(36) + randomBytes(4).toString('hex');
   const rawDir = path.join(PAYSLIPS_DIR, runId, 'raw');
   const protectedDir = path.join(PAYSLIPS_DIR, runId, 'protected');
   fs.mkdirSync(rawDir, { recursive: true });
   fs.mkdirSync(protectedDir, { recursive: true });
 
-  // 1. Parse recipients from Excel
-  const recipients = parseExcel(xlsxBuffer);
-  if (recipients.length === 0) throw new Error('No valid recipients found in Excel file.');
+  let extractionDone = false;
+  try {
+    // 1. Parse recipients from Excel
+    const recipients = parseExcel(xlsxBuffer);
+    if (recipients.length === 0) throw new Error('No valid recipients found in Excel file.');
 
-  // 2. Extract PDFs from ZIP
-  const extractedFiles = extractZip(zipBuffer, rawDir);
-  if (extractedFiles.length === 0) {
-    fs.rmSync(path.join(PAYSLIPS_DIR, runId), { recursive: true, force: true });
-    throw new Error('No valid PDF files found in the uploaded ZIP.');
-  }
+    // 2. Extract PDFs from ZIP
+    const extractedFiles = extractZip(zipBuffer, rawDir);
+    if (extractedFiles.length === 0) throw new Error('No valid PDF files found in the uploaded ZIP.');
+    extractionDone = true;
 
-  // 3. Match filenames → recipients (AI + fuzzy)
-  const { matched, unmatched, unmatched_files, ai_errors } = await matchAttachments(
-    recipients.map((r) => ({ email: r.email, name: r.name })),
-    rawDir,
-    apiKey
-  );
+    // 3. Match filenames → recipients (AI + fuzzy)
+    const { matched, unmatched, unmatched_files, ai_errors } = await matchAttachments(
+      recipients.map((r) => ({ email: r.email, name: r.name })),
+      rawDir,
+      apiKey
+    );
 
-  const recipientMap = new Map(recipients.map((r) => [r.email.toLowerCase(), r]));
+    const recipientMap = new Map(recipients.map((r) => [r.email.toLowerCase(), r]));
 
-  // 4. Password-protect each matched PDF
-  const results = [];
-  const protect_errors = [];
+    // 4. Password-protect each matched PDF
+    const results = [];
+    const protect_errors = [];
 
-  for (const m of matched) {
-    const rec = recipientMap.get(m.email.toLowerCase());
-    if (!rec) continue;
-    if (!rec.ni_no) {
-      protect_errors.push({ email: m.email, error: 'Missing NI No — cannot set PDF password.' });
-      continue;
+    for (const m of matched) {
+      const rec = recipientMap.get(m.email.toLowerCase());
+      if (!rec) continue;
+      if (!rec.ni_no) {
+        protect_errors.push({ email: m.email, error: 'Missing NI No — cannot set PDF password.' });
+        continue;
+      }
+      const outName = path.basename(m.filename, '.pdf') + '_protected.pdf';
+      const outPath = path.join(protectedDir, outName);
+      try {
+        await protectPdf(m.path, outPath, rec.ni_no);
+        // NI No is NOT included in results — it's only used for protection above
+        results.push({
+          email: m.email,
+          name: m.name,
+          filename: outName,
+          protected_path: outPath,
+          confidence: m.confidence
+        });
+      } catch (err) {
+        protect_errors.push({ email: m.email, error: err.message });
+      }
     }
-    const outName = path.basename(m.filename, '.pdf') + '_protected.pdf';
-    const outPath = path.join(protectedDir, outName);
-    try {
-      await protectPdf(m.path, outPath, rec.ni_no);
-      // NI No is NOT included in results — it's only used for protection above
-      results.push({
-        email: m.email,
-        name: m.name,
-        filename: outName,
-        protected_path: outPath,
-        confidence: m.confidence
-      });
-    } catch (err) {
-      protect_errors.push({ email: m.email, error: err.message });
+
+    return { results, unmatched, unmatched_files, protect_errors, ai_errors, run_id: runId };
+  } finally {
+    // Always delete raw (unprotected) PDFs once extraction is done — reduces PII on disk.
+    // If extraction never started, clean up the empty run directory instead.
+    if (extractionDone) {
+      fs.rmSync(rawDir, { recursive: true, force: true });
+    } else {
+      fs.rmSync(path.join(PAYSLIPS_DIR, runId), { recursive: true, force: true });
     }
   }
-
-  // 5. Delete raw (unprotected) PDFs — no longer needed, reduces PII on disk
-  fs.rmSync(rawDir, { recursive: true, force: true });
-
-  return { results, unmatched, unmatched_files, protect_errors, ai_errors, run_id: runId };
 }
 
 // ---- Run management ----
@@ -223,8 +260,13 @@ export function deleteRun(runId) {
   const runPath = path.join(PAYSLIPS_DIR, runId);
   const resolved = path.resolve(runPath);
   if (!resolved.startsWith(path.resolve(PAYSLIPS_DIR) + path.sep)) throw new Error('Invalid run_id.');
-  if (!fs.existsSync(runPath)) throw new Error('Run not found.');
-  fs.rmSync(runPath, { recursive: true, force: true });
+  // Use force:false so ENOENT bubbles up as "not found" rather than silently succeeding.
+  try {
+    fs.rmSync(runPath, { recursive: true, force: false });
+  } catch (err) {
+    if (err.code === 'ENOENT') throw new Error('Run not found.');
+    throw err;
+  }
 }
 
 export function deleteAllRuns() {

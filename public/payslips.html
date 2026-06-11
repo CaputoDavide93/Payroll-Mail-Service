@@ -147,7 +147,7 @@ Kind regards</textarea>
   <!-- Settings dialog (reuse same pattern as main app) -->
   <dialog id="settingsDialog" class="card dialog">
     <h2 style="margin:0 0 1rem">Settings</h2>
-    <form id="settingsForm" method="dialog">
+    <form id="settingsForm">
       <div class="form-row"><label class="label">SMTP host</label><input name="smtp_host" class="input" placeholder="smtp.gmail.com" /></div>
       <div class="form-row"><label class="label">SMTP port</label><input name="smtp_port" class="input" type="number" placeholder="465" /></div>
       <div class="form-row"><label class="label">Gmail / Workspace address</label><input name="smtp_user" class="input" type="email" /></div>
@@ -166,7 +166,7 @@ Kind regards</textarea>
 
   <dialog id="loginDialog" class="card dialog" style="width:min(360px,96vw)">
     <h2 style="margin:0 0 1rem">Sign in</h2>
-    <form id="loginForm">
+    <form id="loginForm" method="dialog">
       <label class="label">Password</label>
       <input id="loginPassword" type="password" class="input" style="margin-bottom:.75rem" autofocus />
       <p id="loginError" class="status err"></p>

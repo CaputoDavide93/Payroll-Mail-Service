@@ -13,7 +13,12 @@ export function listAttachmentFiles(folderPath) {
 }
 
 function normStr(s) {
-  return String(s).toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]/g, ' ').trim();
+  return String(s).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, ' ').trim();
+}
+
+// Strip control chars and newlines to prevent prompt injection via employee names or filenames.
+function sanitize(s) {
+  return String(s).replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 200);
 }
 
 function fuzzyMatch(name, filenames, usedFiles) {
@@ -33,10 +38,10 @@ async function aiMatch(recipients, filenames, apiKey) {
   const prompt = `You are matching payroll attachment files to employee recipients.
 
 Recipients (JSON):
-${JSON.stringify(recipients.map((r) => ({ email: r.email, name: r.name })), null, 2)}
+${JSON.stringify(recipients.map((r) => ({ email: sanitize(r.email), name: sanitize(r.name) })), null, 2)}
 
 Available files:
-${filenames.map((f, i) => `${i + 1}. ${f}`).join('\n')}
+${filenames.map((f, i) => `${i + 1}. ${sanitize(f)}`).join('\n')}
 
 Match each recipient to their file. Be flexible: handle different separators (space, underscore, hyphen, dot), case differences, reversed name order (last first vs first last), accents, initials, and abbreviations.
 
@@ -60,7 +65,6 @@ Only include recipients you matched. Skip unmatched ones.`;
   });
 
   if (!res.ok) {
-    const err = await res.text();
     throw new Error(`Claude API error ${res.status}`);  // don't surface raw API response
   }
 
@@ -78,6 +82,7 @@ Only include recipients you matched. Skip unmatched ones.`;
 }
 
 export async function matchAttachments(recipients, folderPath, apiKey) {
+  if (!recipients || recipients.length === 0) throw new Error('Recipients list is empty.');
   const files = listAttachmentFiles(folderPath);
   if (files.length === 0) throw new Error(`No supported files found in ${folderPath}`);
 

@@ -82,7 +82,12 @@ export function updateSettings(input) {
     smtp_port,
     smtp_secure,
     smtp_user,
-    smtp_pass: input.smtp_pass ? input.smtp_pass : current.smtp_pass,
+    smtp_pass: (() => {
+      if (input.smtp_pass === undefined || input.smtp_pass === null) return current.smtp_pass;
+      const p = String(input.smtp_pass).trim();
+      if (p.length === 0) return current.smtp_pass;  // blank = keep existing
+      return p;
+    })(),
     from_email,
     from_name: input.from_name ?? current.from_name,
     daily_limit: Math.max(1, toInt(input.daily_limit, current.daily_limit)),

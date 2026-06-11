@@ -28,7 +28,15 @@ app.use(express.json());
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } // Gmail's 25MB attachment ceiling
+  limits: { fileSize: 25 * 1024 * 1024 }, // Gmail's 25MB attachment ceiling
+  fileFilter(_req, file, cb) {
+    const allowed = ['application/pdf', 'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv', 'text/plain', 'image/png', 'image/jpeg'];
+    cb(null, allowed.includes(file.mimetype));
+  }
 });
 
 // ---- Optional password gate (recommended when hosting on a public server) ----
@@ -63,7 +71,9 @@ app.use('/api', (req, res, next) => {
     return res.status(429).json({ error: 'Too many attempts. Wait a minute and try again.' });
   }
   if (passwordMatches(req.get('x-app-password'))) {
-    failedAttempts.delete(ip);
+    // Clear the lockout window but keep the count so the IP doesn't reset its budget
+    const existing = failedAttempts.get(ip);
+    if (existing) failedAttempts.set(ip, { count: existing.count, until: 0 });
     return next();
   }
   const count = (rec?.count || 0) + 1;
@@ -74,10 +84,13 @@ app.use('/api', (req, res, next) => {
 // Wrap a handler so BOTH synchronous throws and rejected promises become a clean
 // JSON error response (Promise.resolve(fn()) would miss a synchronous throw inside fn).
 const wrap = (fn) => (req, res) => Promise.resolve().then(() => fn(req, res)).catch((err) => {
-  console.error(err.message);  // message only — full err object may contain PII in argv (e.g. qpdf)
+  console.error(err.message, err.code || '');
   if (res.headersSent) return;
-  const status = err.status || (err.message?.includes('not found') ? 404 : err.code ? 500 : 400);
-  res.status(status).json({ error: err.message });
+  // Only expose messages from errors our code explicitly threw.
+  // System errors (.code), SQLite errors, and library internals get a generic response.
+  const isSafe = !err.code && !/SQLITE_|node_modules|\/app\/|\\app\\/.test(err.message || '');
+  const status = err.status || (isSafe && err.message?.includes('not found') ? 404 : isSafe ? 400 : 500);
+  res.status(status).json({ error: isSafe ? err.message : 'An internal error occurred.' });
 });
 
 // ---- Settings ----
@@ -220,9 +233,10 @@ app.delete('/api/campaigns/:id', wrap((req, res) => {
 }));
 
 // Convert an <input type="datetime-local"> value to "YYYY-MM-DD HH:MM:SS" (UTC for SQLite).
+// Throws on invalid input so callers get a clear error instead of a silent null→running campaign.
 function toSqlTime(local) {
   const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return null;
+  if (Number.isNaN(d.getTime())) throw new Error(`Invalid scheduled start date: "${local}".`);
   return d.toISOString().replace('T', ' ').slice(0, 19);
 }
 
@@ -236,7 +250,16 @@ function intField(value, fallback) {
 // ---- Payslips ----
 const payslipsUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 }
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const allowed = {
+      excel: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+               'application/vnd.ms-excel', 'application/octet-stream'],
+      zip: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream']
+    };
+    const permitted = allowed[file.fieldname] || [];
+    cb(null, permitted.includes(file.mimetype));
+  }
 });
 
 // Validate run_id: server-generated base36 timestamp, no path traversal possible

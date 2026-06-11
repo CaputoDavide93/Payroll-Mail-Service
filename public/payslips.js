@@ -35,7 +35,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
 });
 
 // ---- Settings ----
-$('#settingsBtn').addEventListener('click', openSettings);
+$('#settingsBtn').addEventListener('click', () => openSettings().catch((err) => { alert('Could not open settings: ' + err.message); }));
 $('#settingsClose').addEventListener('click', () => $('#settingsDialog').close());
 
 async function openSettings() {
@@ -95,7 +95,12 @@ function showStep(n) {
   $('#step3').style.display = n === 3 ? '' : 'none';
 }
 
-$('#backBtn').addEventListener('click', () => showStep(1));
+$('#backBtn').addEventListener('click', () => {
+  currentRunId = null;
+  $('#sendSetupBtn').disabled = true;
+  $('#preflightBtn').disabled = true;
+  showStep(1);
+});
 $('#backBtn2').addEventListener('click', () => showStep(2));
 $('#sendSetupBtn').addEventListener('click', () => showStep(3));
 
@@ -108,7 +113,10 @@ function el(tag, cls, text) {
 }
 
 // ---- Step 1: Prepare ----
+let preparing = false;
 $('#prepareBtn').addEventListener('click', async () => {
+  if (preparing) return;
+  preparing = true;
   const excelFile = $('#excelFile').files[0];
   const zipFile = $('#zipFile').files[0];
   const st = $('#prepareStatus');
@@ -140,6 +148,7 @@ $('#prepareBtn').addEventListener('click', async () => {
   } catch (err) {
     st.className = 'status err'; st.textContent = err.message;
   } finally {
+    preparing = false;
     $('#prepareBtn').disabled = false;
   }
 });
@@ -304,10 +313,11 @@ $('#sendForm').addEventListener('submit', async (e) => {
     link.textContent = 'View campaigns →';
     st.appendChild(link);
     currentRunId = null;
+    btn.disabled = true;  // keep disabled — run is consumed, prevent double-submit
+    btn.textContent = 'Sent ✓';
     loadRuns();
   } catch (err) {
     st.className = 'status err'; st.textContent = err.message;
-  } finally {
     btn.disabled = false;
   }
 });
@@ -346,11 +356,13 @@ async function loadRuns() {
       li.appendChild(delBtn);
       list.appendChild(li);
     }
-  } catch { /* ignore */ }
+  } catch (err) {
+    if (err.message === 'Unauthorized') throw err; // let auth errors propagate
+  }
 }
 
 $('#deleteAllBtn').addEventListener('click', async () => {
-  if (!confirm('Delete ALL payslip data from the server? This removes all protected PDFs and match results.')) return;
+  if (!confirm('Delete ALL payslip data from the server?\n\nWARNING: If you have already created a campaign from these payslips and it is still sending, those emails will fail because the attached PDFs will be deleted.\n\nThis cannot be undone.')) return;
   const st = $('#cleanupStatus');
   st.className = 'status'; st.textContent = 'Deleting…';
   try {
