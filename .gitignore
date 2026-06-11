@@ -4,3 +4,13 @@ data/
 *.log
 .DS_Store
 .gstack/
+
+# Terraform
+terraform/*.pem
+terraform/terraform.tfvars
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate*
+terraform/bootstrap/.terraform/
+terraform/bootstrap/.terraform.lock.hcl
+terraform/bootstrap/terraform.tfstate*
