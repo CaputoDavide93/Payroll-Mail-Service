@@ -186,18 +186,17 @@ Set in **⚙️ Settings** in the UI, or seed via environment variables. Copy `.
 
 The app is a single container — deploy it anywhere Docker runs. Close your laptop and batches keep sending on schedule.
 
-### AWS EC2 (Free-Tier Eligible)
+### Any Linux Server (VPS, EC2, etc.)
 
 ```bash
-# 1. Launch Amazon Linux 2023, t3.micro, allow inbound 22 + 443
+# 1. Install Docker
+sudo apt-get update && sudo apt-get install -y docker.io git   # Debian/Ubuntu
+# or: sudo dnf install -y docker git                           # Amazon Linux / RHEL
 
-# 2. Connect and install Docker
-ssh -i your-key.pem ec2-user@<public-ip>
-sudo dnf update -y && sudo dnf install -y docker git
 sudo systemctl enable --now docker
-sudo usermod -aG docker ec2-user   # log out/in after this
+sudo usermod -aG docker $USER   # log out/in after this
 
-# 3. Deploy the app
+# 2. Deploy the app
 git clone https://github.com/CaputoDavide93/Payroll-Mail-Service.git payroll-mail
 cd payroll-mail
 cp .env.example .env
@@ -208,11 +207,13 @@ docker compose up -d --build
 **Access via SSH tunnel** (simplest — no public port needed):
 
 ```bash
-ssh -i your-key.pem -L 3000:localhost:3000 ec2-user@<public-ip>
+ssh -L 3000:localhost:3000 user@<server-ip>
 # open http://localhost:3000 on your laptop
 ```
 
 For team access, put Caddy or Nginx in front on port 443 for automatic HTTPS.
+
+> **Security:** Always set `APP_PASSWORD` on any internet-facing server — without it the API is fully open.
 
 ---
 
