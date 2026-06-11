@@ -30,8 +30,8 @@ provider "aws" {
   default_tags {
     tags = {
       Application = "PayrollMailService"
-      ManagedBy   = "terraform"
-      Owner       = "Davide Caputo - TechOps"
+      ManagedBy   = "Terraform"
+      Owner       = "Davide Caputo"
     }
   }
 }

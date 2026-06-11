@@ -10,9 +10,13 @@ resource "tls_private_key" "this" {
 resource "aws_key_pair" "this" {
   key_name   = "payroll-mail-service-${var.environment}"
   public_key = tls_private_key.this.public_key_openssh
+
+  tags = {
+    Name  = "payroll-mail-service-key-pair"
+    Owner = "Davide Caputo"
+  }
 }
 
-# Saved next to main.tf — chmod 600 applied automatically.
 resource "local_sensitive_file" "private_key" {
   content         = tls_private_key.this.private_key_pem
   filename        = "${path.module}/payroll-mail-service.pem"
@@ -50,6 +54,11 @@ resource "aws_security_group" "this" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
+
+  tags = {
+    Name  = "payroll-mail-service-sg"
+    Owner = "Davide Caputo"
+  }
 }
 
 # =============================================================================
@@ -80,34 +89,32 @@ resource "aws_instance" "this" {
   instance_type          = var.instance_type
   key_name               = aws_key_pair.this.key_name
   vpc_security_group_ids = [aws_security_group.this.id]
+  iam_instance_profile   = aws_iam_instance_profile.ec2.name
 
   root_block_device {
     volume_type           = "gp3"
     volume_size           = var.root_volume_size_gb
     delete_on_termination = true
     encrypted             = true
+
+    tags = {
+      Name  = "payroll-mail-service-root-volume"
+      Owner = "Davide Caputo"
+    }
   }
 
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
-    git_repo_url      = var.git_repo_url
-    git_branch        = var.git_branch
-    app_password      = var.app_password
-    smtp_host         = var.smtp_host
-    smtp_port         = tostring(var.smtp_port)
-    smtp_user         = var.smtp_user
-    smtp_pass         = var.smtp_pass
-    from_email        = var.from_email
-    from_name         = var.from_name
-    daily_limit       = tostring(var.daily_limit)
-    anthropic_api_key = var.anthropic_api_key
+    git_repo_url = var.git_repo_url
+    git_branch   = var.git_branch
+    secret_arn   = aws_secretsmanager_secret.app_config.arn
+    aws_region   = var.aws_region
   })
 
-  # To re-run setup after changing env vars:
-  #   terraform taint aws_instance.this && terraform apply
   user_data_replace_on_change = false
 
-  lifecycle {
-    prevent_destroy = false
+  tags = {
+    Name  = "payroll-mail-service"
+    Owner = "Davide Caputo"
   }
 }
 
@@ -118,4 +125,9 @@ resource "aws_instance" "this" {
 resource "aws_eip" "this" {
   instance = aws_instance.this.id
   domain   = "vpc"
+
+  tags = {
+    Name  = "payroll-mail-service-eip"
+    Owner = "Davide Caputo"
+  }
 }

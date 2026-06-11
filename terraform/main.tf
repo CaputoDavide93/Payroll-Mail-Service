@@ -1,19 +1,25 @@
 # =============================================================================
 # Payroll Mail Service — EC2 deployment (eu-west-1)
 # =============================================================================
-# Single t3.micro running the app in Docker with an Elastic IP.
+# Single t3.micro with Elastic IP. Secrets stored in AWS Secrets Manager.
 #
 # First-time setup:
 #   1. cd terraform/bootstrap && terraform init && terraform apply && cd ..
 #   2. terraform init
 #   3. cp terraform.tfvars.example terraform.tfvars  # fill in non-secret vars
-#   4. export TF_VAR_app_password="your-ui-password"
-#      export TF_VAR_smtp_user="you@example.com"
-#      export TF_VAR_smtp_pass="your-gmail-app-password"
-#      export TF_VAR_from_email="you@example.com"
-#      export TF_VAR_anthropic_api_key="sk-ant-..."   # optional
+#   4. Set secrets as env vars (never in files):
+#        export TF_VAR_app_password="your-ui-password"
+#        export TF_VAR_smtp_user="you@example.com"
+#        export TF_VAR_smtp_pass="your-gmail-app-password"
+#        export TF_VAR_from_email="you@example.com"
+#        export TF_VAR_anthropic_api_key="sk-ant-..."   # optional
 #   5. terraform plan
 #   6. terraform apply
+#
+# After apply:
+#   - Secrets are in AWS Secrets Manager (payroll-mail-service/prod/config)
+#   - The EC2 instance fetches them at boot via its IAM role
+#   - Private key saved to terraform/payroll-mail-service.pem
 # =============================================================================
 
 terraform {
@@ -53,8 +59,8 @@ provider "aws" {
     tags = {
       Application = "PayrollMailService"
       Environment = var.environment
-      ManagedBy   = "terraform"
-      Owner       = "Davide Caputo - TechOps"
+      ManagedBy   = "Terraform"
+      Owner       = "Davide Caputo"
     }
   }
 }
