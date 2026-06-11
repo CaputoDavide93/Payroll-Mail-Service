@@ -2,7 +2,7 @@ FROM node:20-bookworm-slim
 
 # Build tools so better-sqlite3 compiles if no prebuilt binary is available.
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+  && apt-get install -y --no-install-recommends python3 make g++ ca-certificates qpdf \
   && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app

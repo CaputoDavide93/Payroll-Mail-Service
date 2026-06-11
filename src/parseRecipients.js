@@ -23,7 +23,7 @@ export function parseRecipients(buffer) {
       skip_empty_lines: true,
       trim: true,
       bom: true,
-      relax_column_count: true
+      relax_column_count: false
     });
   } catch (err) {
     return { recipients: [], errors: [`Could not read the CSV file: ${err.message}`], columns: [] };

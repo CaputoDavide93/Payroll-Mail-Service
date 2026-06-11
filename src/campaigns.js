@@ -10,8 +10,8 @@ const insertCampaign = db.prepare(`
 `);
 
 const insertRecipient = db.prepare(`
-  INSERT INTO recipients (campaign_id, email, name, fields_json)
-  VALUES (@campaign_id, @email, @name, @fields_json)
+  INSERT INTO recipients (campaign_id, email, name, fields_json, attachment_path)
+  VALUES (@campaign_id, @email, @name, @fields_json, @attachment_path)
 `);
 
 // Create a campaign and its recipients atomically.
@@ -23,7 +23,8 @@ export const createCampaign = db.transaction((campaign, recipients) => {
       campaign_id: campaignId,
       email: r.email,
       name: r.name || '',
-      fields_json: JSON.stringify(r.fields || {})
+      fields_json: r.fields_json ?? JSON.stringify(r.fields || {}),
+      attachment_path: r.attachment_path || null
     });
   }
   return campaignId;
@@ -34,7 +35,7 @@ const statsStmt = db.prepare(`
 `);
 
 export function campaignStats(campaignId) {
-  const out = { total: 0, pending: 0, sent: 0, failed: 0 };
+  const out = { total: 0, pending: 0, sending: 0, sent: 0, failed: 0 };
   for (const row of statsStmt.all(campaignId)) {
     out[row.status] = row.n;
     out.total += row.n;
@@ -104,9 +105,15 @@ export function deleteCampaign(id) {
 }
 
 // Reset failed recipients back to pending so a campaign can retry them.
+// If the campaign was already completed, set it back to running so the worker picks it up.
 const requeueFailedStmt = db.prepare(
   "UPDATE recipients SET status='pending', error=NULL, attempts=0 WHERE campaign_id = ? AND status='failed'"
 );
-export function requeueFailed(id) {
-  return requeueFailedStmt.run(id).changes;
-}
+const reactivateCompletedStmt = db.prepare(
+  "UPDATE campaigns SET status='running', next_batch_at=NULL WHERE id=? AND status='completed'"
+);
+export const requeueFailed = db.transaction((id) => {
+  const changes = requeueFailedStmt.run(id).changes;
+  if (changes > 0) reactivateCompletedStmt.run(id);
+  return changes;
+});

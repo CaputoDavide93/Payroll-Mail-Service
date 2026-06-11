@@ -62,4 +62,9 @@ db.exec(`
   CREATE INDEX IF NOT EXISTS idx_recipients_sent_at  ON recipients(sent_at);
 `);
 
+// Migrations — safe to run on every boot; silently no-ops if already applied.
+const migrate = (sql) => { try { db.prepare(sql).run(); } catch { /* column already exists */ } };
+migrate('ALTER TABLE recipients ADD COLUMN attachment_path TEXT');
+migrate('ALTER TABLE settings ADD COLUMN anthropic_api_key TEXT NOT NULL DEFAULT \'\'')
+
 export default db;

@@ -15,8 +15,102 @@
         <p class="tagline">Send a personalized email with an attachment to your whole list — safely, in batches.</p>
       </div>
     </div>
-    <button id="settingsBtn" class="btn ghost">⚙️ Settings</button>
+    <div class="row">
+      <a href="/payslips.html" class="btn ghost">📋 Payslips</a>
+      <button id="howtoBtn" class="btn ghost">❓ How to</button>
+      <button id="settingsBtn" class="btn ghost">⚙️ Settings</button>
+    </div>
   </header>
+
+  <!-- How to -->
+  <dialog id="howtoDialog">
+    <div class="card howto-card">
+      <div class="row between" style="margin-bottom:1rem">
+        <h2 style="font-size:1.15rem;margin:0">How to use Payroll Mail Service</h2>
+        <button type="button" class="btn ghost small" id="howtoClose">✕</button>
+      </div>
+
+      <div class="howto-steps">
+
+        <div class="howto-step">
+          <div class="howto-num">1</div>
+          <div>
+            <div class="howto-title">Set up your Gmail account</div>
+            <p class="howto-body">Click <b>⚙️ Settings</b> in the top-right corner. You need a <b>Gmail App Password</b> — not your normal password.</p>
+            <ol class="howto-list">
+              <li>Go to <b>myaccount.google.com</b> → Security → 2-Step Verification (must be on)</li>
+              <li>Search for <b>"App passwords"</b> → create one named "Payroll Mail"</li>
+              <li>Copy the 16-character code and paste it into the <b>App Password</b> field</li>
+              <li>Fill in your Gmail address and click <b>Save settings</b></li>
+              <li>Use <b>Send test</b> to verify everything works before your first real send</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">2</div>
+          <div>
+            <div class="howto-title">Prepare your recipients CSV</div>
+            <p class="howto-body">Create a spreadsheet (Excel or Google Sheets) and export it as <b>.csv</b>. It must have:</p>
+            <ul class="howto-list">
+              <li><code>email</code> column — recipient's email address <span class="req">required</span></li>
+              <li><code>name</code> column — used in the greeting (e.g. "Hi Sarah,") <span class="howto-rec">recommended</span></li>
+              <li>Any extra columns (e.g. <code>department</code>, <code>salary</code>) can be used as placeholders too</li>
+            </ul>
+            <div class="howto-example">email, name, department<br/>sarah@company.com, Sarah, Finance<br/>john@company.com, John, Engineering</div>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">3</div>
+          <div>
+            <div class="howto-title">Create a send</div>
+            <p class="howto-body">Fill in the <b>New send</b> form at the top of the page:</p>
+            <ul class="howto-list">
+              <li><b>Campaign name</b> — for your reference only (e.g. "June payslips")</li>
+              <li><b>Subject</b> — use <code>{name}</code> to personalise (e.g. "Your June payslip, {name}")</li>
+              <li><b>Email body</b> — write your message; use <code>{name}</code> or any CSV column name in curly braces</li>
+              <li><b>Recipients CSV</b> — upload the file you prepared in step 2</li>
+              <li><b>Attachment</b> — upload the PDF (or other file) to send to everyone</li>
+              <li><b>Batch size</b> — how many emails to send at once (10 is safe for Gmail)</li>
+              <li><b>Seconds between batches</b> — pause between groups (60s keeps Gmail happy)</li>
+            </ul>
+            <p class="howto-body">Click <b>Create &amp; send</b>. You can close this browser tab — sending continues on the server.</p>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">4</div>
+          <div>
+            <div class="howto-title">Monitor progress</div>
+            <p class="howto-body">Scroll down to the <b>Sends</b> section. Each send shows a progress bar and counts for sent / pending / failed. The page auto-refreshes every few seconds.</p>
+            <ul class="howto-list">
+              <li><b>Pause</b> — temporarily stop sending (resumes from where it left off)</li>
+              <li><b>Resume</b> — continue a paused send</li>
+              <li><b>Stop</b> — cancel the send permanently (remaining recipients won't receive anything)</li>
+              <li><b>Retry failed</b> — re-queue any recipients that failed (e.g. bad address)</li>
+              <li><b>Send preview</b> — send yourself a real copy of the email before the full blast</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">5</div>
+          <div>
+            <div class="howto-title">Tips &amp; limits</div>
+            <ul class="howto-list">
+              <li>Free Gmail accounts: ~<b>500 emails/day</b>. Google Workspace: ~<b>2 000/day</b></li>
+              <li>The daily limit resets on a rolling 24-hour basis, not at midnight</li>
+              <li>If sending stops unexpectedly, restart the server — it will pick up exactly where it left off with no duplicates</li>
+              <li>Attachments are shared: the <b>same file</b> goes to every recipient</li>
+              <li>Use the <b>Schedule start</b> field to send overnight or at the weekend</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </dialog>
 
   <!-- Login (only shown when password protection is on) -->
   <dialog id="loginDialog">

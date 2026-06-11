@@ -1,4 +1,6 @@
 import nodemailer from 'nodemailer';
+import path from 'node:path';
+import fs from 'node:fs';
 import { getSettings } from './settings.js';
 
 // Build a fresh transporter from the current settings. Cheap enough to do per batch,
@@ -15,7 +17,7 @@ export function buildTransport() {
     auth: { user: s.smtp_user, pass: s.smtp_pass },
     pool: true,
     maxConnections: 1,
-    maxMessages: 100
+    maxMessages: Infinity
   });
 }
 
@@ -76,11 +78,16 @@ export async function sendOne(transport, campaign, recipient, fromHeader, toOver
     html
   };
 
-  if (campaign.attachment_path) {
-    message.attachments = [{
-      filename: campaign.attachment_name || 'attachment',
-      path: campaign.attachment_path
-    }];
+  // Per-recipient attachment takes precedence over campaign-level attachment.
+  const attachPath = recipient.attachment_path || campaign.attachment_path;
+  if (attachPath) {
+    if (!fs.existsSync(attachPath)) {
+      throw new Error(`Attachment file not found: ${path.basename(attachPath)}`);
+    }
+    const attachName = recipient.attachment_path
+      ? path.basename(recipient.attachment_path)
+      : (campaign.attachment_name || 'attachment');
+    message.attachments = [{ filename: attachName, path: attachPath }];
   }
 
   return transport.sendMail(message);

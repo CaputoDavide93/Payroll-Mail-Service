@@ -14,6 +14,8 @@ import {
   campaignStats, failedRecipients, deleteCampaign, requeueFailed, firstRecipient
 } from './src/campaigns.js';
 import { startWorker, stopWorker } from './src/worker.js';
+import { preparePayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { getAnthropicApiKey } from './src/settings.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -26,7 +28,15 @@ app.use(express.json());
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 25 * 1024 * 1024 } // Gmail's 25MB attachment ceiling
+  limits: { fileSize: 25 * 1024 * 1024 }, // Gmail's 25MB attachment ceiling
+  fileFilter(_req, file, cb) {
+    const allowed = ['application/pdf', 'application/msword',
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+      'application/vnd.ms-excel',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      'text/csv', 'text/plain', 'image/png', 'image/jpeg'];
+    cb(null, allowed.includes(file.mimetype));
+  }
 });
 
 // ---- Optional password gate (recommended when hosting on a public server) ----
@@ -61,7 +71,9 @@ app.use('/api', (req, res, next) => {
     return res.status(429).json({ error: 'Too many attempts. Wait a minute and try again.' });
   }
   if (passwordMatches(req.get('x-app-password'))) {
-    failedAttempts.delete(ip);
+    // Clear the lockout window but keep the count so the IP doesn't reset its budget
+    const existing = failedAttempts.get(ip);
+    if (existing) failedAttempts.set(ip, { count: existing.count, until: 0 });
     return next();
   }
   const count = (rec?.count || 0) + 1;
@@ -72,10 +84,13 @@ app.use('/api', (req, res, next) => {
 // Wrap a handler so BOTH synchronous throws and rejected promises become a clean
 // JSON error response (Promise.resolve(fn()) would miss a synchronous throw inside fn).
 const wrap = (fn) => (req, res) => Promise.resolve().then(() => fn(req, res)).catch((err) => {
-  console.error(err);
+  console.error(err.message, err.code || '');
   if (res.headersSent) return;
-  const status = err.status || (err.message?.includes('not found') ? 404 : err.code ? 500 : 400);
-  res.status(status).json({ error: err.message });
+  // Only expose messages from errors our code explicitly threw.
+  // System errors (.code), SQLite errors, and library internals get a generic response.
+  const isSafe = !err.code && !/SQLITE_|node_modules|\/app\/|\\app\\/.test(err.message || '');
+  const status = err.status || (isSafe && err.message?.includes('not found') ? 404 : isSafe ? 400 : 500);
+  res.status(status).json({ error: isSafe ? err.message : 'An internal error occurred.' });
 });
 
 // ---- Settings ----
@@ -218,9 +233,10 @@ app.delete('/api/campaigns/:id', wrap((req, res) => {
 }));
 
 // Convert an <input type="datetime-local"> value to "YYYY-MM-DD HH:MM:SS" (UTC for SQLite).
+// Throws on invalid input so callers get a clear error instead of a silent null→running campaign.
 function toSqlTime(local) {
   const d = new Date(local);
-  if (Number.isNaN(d.getTime())) return null;
+  if (Number.isNaN(d.getTime())) throw new Error(`Invalid scheduled start date: "${local}".`);
   return d.toISOString().replace('T', ' ').slice(0, 19);
 }
 
@@ -230,6 +246,126 @@ function intField(value, fallback) {
   const n = Number(value);
   return Number.isFinite(n) ? n : fallback;
 }
+
+// ---- Payslips ----
+const payslipsUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 100 * 1024 * 1024 },
+  fileFilter(_req, file, cb) {
+    const allowed = {
+      excel: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+               'application/vnd.ms-excel', 'application/octet-stream'],
+      zip: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream']
+    };
+    const permitted = allowed[file.fieldname] || [];
+    cb(null, permitted.includes(file.mimetype));
+  }
+});
+
+// Validate run_id: server-generated base36 timestamp, no path traversal possible
+function assertRunId(run_id) {
+  if (!run_id || !/^[a-z0-9]+$/.test(run_id)) throw new Error('Invalid run_id.');
+  const resolved = path.resolve(path.join(PAYSLIPS_DIR, run_id));
+  if (!resolved.startsWith(path.resolve(PAYSLIPS_DIR) + path.sep)) throw new Error('Invalid run_id.');
+  return resolved;
+}
+
+// Load results.json for a run; throws if missing or corrupt.
+function loadRunResults(run_id) {
+  const runDir = assertRunId(run_id);
+  const resultFile = path.join(runDir, 'results.json');
+  try {
+    return JSON.parse(fs.readFileSync(resultFile, 'utf8'));
+  } catch {
+    throw new Error('Prepared run not found or corrupted. Please re-upload files.');
+  }
+}
+
+// Step 1: Upload Excel + ZIP, run AI-match + protect pipeline.
+app.post('/api/payslips/prepare', payslipsUpload.fields([
+  { name: 'excel', maxCount: 1 },
+  { name: 'zip', maxCount: 1 }
+]), wrap(async (req, res) => {
+  const excelFile = req.files?.excel?.[0];
+  const zipFile = req.files?.zip?.[0];
+  if (!excelFile) throw new Error('Please upload the Excel file (employees).');
+  if (!zipFile) throw new Error('Please upload the ZIP file (PDFs).');
+
+  const apiKey = getAnthropicApiKey();
+  const outcome = await preparePayslips(excelFile.buffer, zipFile.buffer, apiKey);
+
+  // Persist results — NI numbers are NOT in outcome.results (stripped in preparePayslips)
+  const resultFile = path.join(PAYSLIPS_DIR, outcome.run_id, 'results.json');
+  fs.writeFileSync(resultFile, JSON.stringify(outcome));
+
+  res.json({
+    run_id: outcome.run_id,
+    matched: outcome.results.map((r) => ({ email: r.email, name: r.name, filename: r.filename, confidence: r.confidence })),
+    unmatched: outcome.unmatched,
+    unmatched_files: outcome.unmatched_files,
+    protect_errors: outcome.protect_errors,
+    ai_errors: outcome.ai_errors
+  });
+}));
+
+// Step 1b: AI pre-flight check on a prepared run.
+app.post('/api/payslips/preflight', wrap(async (req, res) => {
+  const { run_id } = req.body;
+  if (!run_id) throw new Error('Missing run_id.');
+  const outcome = loadRunResults(run_id);
+  if (!outcome.results?.length) throw new Error('No matched payslips to check.');
+  const result = await preflightCheck(outcome.results);
+  res.json(result);
+}));
+
+// Step 2: Create a campaign from a prepared payslips run (per-recipient attachments).
+app.post('/api/payslips/send', wrap((req, res) => {
+  const { run_id, name, subject, body, from_name, from_email, batch_size, batch_interval_seconds, as_draft } = req.body;
+  if (!run_id) throw new Error('Missing run_id.');
+  if (!name?.trim()) throw new Error('Please give the campaign a name.');
+  if (!subject?.trim()) throw new Error('Please enter a subject line.');
+  if (!body?.trim()) throw new Error('Please write the email body.');
+
+  const outcome = loadRunResults(run_id);
+  if (!outcome.results?.length) throw new Error('No successfully prepared payslips in this run.');
+
+  const recipients = outcome.results.map((r) => ({
+    email: r.email,
+    name: r.name,
+    attachment_path: r.protected_path,
+    fields_json: JSON.stringify({ name: r.name, email: r.email, filename: r.filename })
+  }));
+
+  const status = (as_draft === 'true' || as_draft === true) ? 'draft' : 'running';
+  const id = createCampaign({
+    name: name.trim(),
+    subject: subject.trim(),
+    body,
+    from_name: (from_name || '').trim(),
+    from_email: (from_email || '').trim(),
+    attachment_path: null,
+    attachment_name: null,
+    batch_size: Math.max(1, intField(batch_size, 10)),
+    batch_interval_seconds: Math.max(0, intField(batch_interval_seconds, 60)),
+    scheduled_start: null,
+    status
+  }, recipients);
+
+  res.json({ id, accepted: recipients.length });
+}));
+
+// Run management — list, delete one, delete all
+app.get('/api/payslips/runs', wrap((req, res) => res.json(listRuns())));
+
+app.delete('/api/payslips/runs/all', wrap((req, res) => {
+  const count = deleteAllRuns();
+  res.json({ ok: true, deleted: count });
+}));
+
+app.delete('/api/payslips/runs/:runId', wrap((req, res) => {
+  deleteRun(req.params.runId);
+  res.json({ ok: true });
+}));
 
 app.use(express.static(path.join(__dirname, 'public')));
 
