@@ -75,7 +75,7 @@ export async function protectPdf(inputPath, outputPath, password) {
   } catch {
     // Don't propagate qpdf's raw error — argv contains the password.
     // Remove any partial output file qpdf may have created before throwing.
-    try { fs.unlinkSync(outputPath); } catch { /* ignore */ }
+    try { fs.unlinkSync(outputPath); } catch (e) { console.warn('[protectPdf] failed to remove partial output:', outputPath, e.message); }
     throw new Error('PDF protection failed (qpdf error).');
   }
 }
@@ -226,6 +226,8 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
     // Always delete raw (unprotected) PDFs once extraction is done — reduces PII on disk.
     // If extraction never started, clean up the empty run directory instead.
     if (extractionDone) {
+      // If all protections failed, clean up empty protectedDir too
+      if (results.length === 0) fs.rmSync(protectedDir, { recursive: true, force: true });
       fs.rmSync(rawDir, { recursive: true, force: true });
     } else {
       fs.rmSync(path.join(PAYSLIPS_DIR, runId), { recursive: true, force: true });

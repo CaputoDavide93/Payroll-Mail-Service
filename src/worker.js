@@ -35,8 +35,9 @@ const claimBatch = db.transaction((campaignId, size) => {
     "SELECT * FROM recipients WHERE campaign_id = ? AND status = 'pending' ORDER BY id LIMIT ?"
   ).all(campaignId, size);
   if (rows.length > 0) {
-    const ids = rows.map((r) => r.id).join(',');
-    db.prepare(`UPDATE recipients SET status='sending' WHERE id IN (${ids})`).run();
+    const ids = rows.map((r) => r.id);
+    if (!ids.every(Number.isInteger)) throw new Error('Non-integer recipient ID in claimBatch');
+    db.prepare(`UPDATE recipients SET status='sending' WHERE id IN (${ids.join(',')})`).run();
   }
   return rows;
 });
@@ -46,6 +47,9 @@ const markSentStmt = db.prepare(
 );
 const markFailedStmt = db.prepare(
   "UPDATE recipients SET status='failed', attempts=attempts+1, error=? WHERE id = ?"
+);
+const resetToPendingStmt = db.prepare(
+  "UPDATE recipients SET status='pending' WHERE id = ?"
 );
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -110,7 +114,7 @@ async function tick() {
       const live = currentStatusStmt.get(campaign.id);
       if (!live || live.status !== 'running') {
         // Campaign paused/cancelled mid-batch — reset claimed-but-unsent rows back to pending
-        markFailedStmt.run('Campaign stopped mid-batch', recipient.id);
+        resetToPendingStmt.run(recipient.id);
         continue;
       }
       const result = await trySend(transport, campaign, recipient, fromHeader);
