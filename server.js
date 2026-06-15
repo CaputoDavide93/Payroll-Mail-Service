@@ -354,6 +354,24 @@ app.post('/api/payslips/send', wrap((req, res) => {
   res.json({ id, accepted: recipients.length });
 }));
 
+// Sample Excel download — returns a pre-filled .xlsx the user can use as a template
+app.get('/api/payslips/sample-excel', (_req, res) => {
+  import('xlsx').then((XLSX) => {
+    const wb = XLSX.utils.book_new();
+    const ws = XLSX.utils.aoa_to_sheet([
+      ['EENo', 'FullName', 'NI No', 'Email Address'],
+      ['E001', 'Alice Smith', 'AB123456C', 'alice.smith@example.com'],
+      ['E002', 'Bob Jones',  'CD234567D', 'bob.jones@example.com'],
+      ['E003', 'Carol White', 'EF345678E', 'carol.white@example.com'],
+    ]);
+    XLSX.utils.book_append_sheet(wb, ws, 'Employees');
+    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+    res.setHeader('Content-Disposition', 'attachment; filename="sample-employees.xlsx"');
+    res.send(buf);
+  });
+});
+
 // Run management — list, delete one, delete all
 app.get('/api/payslips/runs', wrap((req, res) => res.json(listRuns())));
 
