@@ -123,10 +123,9 @@ async function loadPayslipRuns() {
 document.querySelectorAll('input[name="attachType"]').forEach((radio) => {
   radio.addEventListener('change', () => {
     const isPayslips = $('#attachTypePayslips').checked;
-    $('#attachFileWrap').style.display = isPayslips ? 'none' : '';
-    $('#attachPayslipsWrap').style.display = isPayslips ? '' : 'none';
+    $('#normalAttachRow').style.display = isPayslips ? 'none' : '';
+    $('#payslipsAttachRow').style.display = isPayslips ? '' : 'none';
     $('#recipientsFile').required = !isPayslips;
-    $('#recipientsLabel').style.display = isPayslips ? 'none' : '';
     if (isPayslips) loadPayslipRuns();
   });
 });
@@ -184,10 +183,9 @@ $('#campaignForm').addEventListener('submit', async (e) => {
     st.textContent = msg;
     form.reset();
     $('#attachTypeFile').checked = true;
-    $('#attachFileWrap').style.display = '';
-    $('#attachPayslipsWrap').style.display = 'none';
+    $('#normalAttachRow').style.display = '';
+    $('#payslipsAttachRow').style.display = 'none';
     $('#recipientsFile').required = true;
-    $('#recipientsLabel').style.display = '';
     $('#recipientsHint').innerHTML = 'Needs an <code>email</code> column; a <code>name</code> column is recommended.';
     $('#attachmentHint').textContent = 'Max 25 MB. The same file goes to everyone.';
     loadCampaigns();

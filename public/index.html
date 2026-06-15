@@ -205,34 +205,37 @@ The Payroll Team"></textarea>
         </label>
         <p class="hint">Use <code>{name}</code> to insert each person's name. Any other CSV column works too, e.g. <code>{department}</code>.</p>
 
-        <div class="grid2">
-          <div id="recipientsLabel">
-            <label>Recipients (CSV) <span class="req">*</span>
-              <input type="file" name="recipients" id="recipientsFile" accept=".csv,text/csv" required />
-              <span class="hint" id="recipientsHint">Needs an <code>email</code> column; a <code>name</code> column is recommended.</span>
-            </label>
-          </div>
-          <div>
-            <div style="margin-bottom:.5rem;font-size:.9rem;font-weight:500">Attachment</div>
-            <div style="display:flex;gap:1.25rem;margin-bottom:.6rem">
-              <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-weight:normal">
-                <input type="radio" name="attachType" value="file" id="attachTypeFile" checked> Upload file
-              </label>
-              <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-weight:normal">
-                <input type="radio" name="attachType" value="payslips" id="attachTypePayslips"> Protected payslips
-              </label>
-            </div>
-            <div id="attachFileWrap">
-              <input type="file" name="attachment" id="attachmentFile" style="display:block;width:100%">
-              <span class="hint" id="attachmentHint">Max 25 MB. The same file goes to everyone.</span>
-            </div>
-            <div id="attachPayslipsWrap" style="display:none">
-              <select id="payslipRunSelect" style="width:100%;padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;font-size:.9rem">
-                <option value="">— select a prepared run —</option>
-              </select>
-              <span class="hint">Each recipient gets their own password-protected PDF.</span>
-            </div>
-          </div>
+        <!-- Attachment type toggle -->
+        <div style="display:flex;gap:1.5rem;margin-bottom:.75rem;align-items:center">
+          <span style="font-size:.9rem;font-weight:500">Attachment:</span>
+          <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-weight:normal;font-size:.9rem">
+            <input type="radio" name="attachType" value="file" id="attachTypeFile" checked> Upload file
+          </label>
+          <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-weight:normal;font-size:.9rem">
+            <input type="radio" name="attachType" value="payslips" id="attachTypePayslips"> Protected payslips
+          </label>
+        </div>
+
+        <!-- Normal mode: CSV + file upload -->
+        <div class="grid2" id="normalAttachRow">
+          <label>Recipients (CSV) <span class="req">*</span>
+            <input type="file" name="recipients" id="recipientsFile" accept=".csv,text/csv" required />
+            <span class="hint" id="recipientsHint">Needs an <code>email</code> column; a <code>name</code> column is recommended.</span>
+          </label>
+          <label>Attachment (PDF, etc.)
+            <input type="file" name="attachment" id="attachmentFile" />
+            <span class="hint" id="attachmentHint">Max 25 MB. The same file goes to everyone.</span>
+          </label>
+        </div>
+
+        <!-- Payslips mode: run selector -->
+        <div id="payslipsAttachRow" style="display:none">
+          <label>Prepared payslips run
+            <select id="payslipRunSelect" style="width:100%;padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;font-size:.9rem;margin-top:.25rem">
+              <option value="">— select a prepared run —</option>
+            </select>
+            <span class="hint">Recipients and their password-protected PDFs are taken from the selected run. No CSV needed.</span>
+          </label>
         </div>
 
         <div class="grid3">
