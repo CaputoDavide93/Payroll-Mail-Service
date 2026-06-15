@@ -246,13 +246,15 @@ export function listRuns() {
       const resultFile = path.join(runPath, 'results.json');
       let created = null;
       let recipient_count = 0;
+      let name = null;
       try {
         const stat = fs.statSync(resultFile);
         created = stat.mtime.toISOString();
         const data = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
         recipient_count = data.results?.length || 0;
+        name = data.name || null;
       } catch { /* ignore */ }
-      return { run_id: d.name, created, recipient_count };
+      return { run_id: d.name, created, recipient_count, name };
     })
     .sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 }

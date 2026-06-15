@@ -305,7 +305,8 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
 
   // Persist results — NI numbers are NOT in outcome.results (stripped in preparePayslips)
   const resultFile = path.join(PAYSLIPS_DIR, outcome.run_id, 'results.json');
-  fs.writeFileSync(resultFile, JSON.stringify(outcome));
+  const runName = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  fs.writeFileSync(resultFile, JSON.stringify({ ...outcome, name: runName }));
 
   res.json({
     run_id: outcome.run_id,
