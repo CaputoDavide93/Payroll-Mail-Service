@@ -174,6 +174,7 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
   fs.mkdirSync(protectedDir, { recursive: true });
 
   let extractionDone = false;
+  const results = [];
   try {
     // 1. Parse recipients from Excel
     const recipients = parseExcel(xlsxBuffer);
@@ -194,7 +195,6 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
     const recipientMap = new Map(recipients.map((r) => [r.email.toLowerCase(), r]));
 
     // 4. Password-protect each matched PDF
-    const results = [];
     const protect_errors = [];
 
     for (const m of matched) {
