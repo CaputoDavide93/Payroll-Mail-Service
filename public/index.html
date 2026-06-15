@@ -206,24 +206,24 @@ The Payroll Team"></textarea>
         <p class="hint">Use <code>{name}</code> to insert each person's name. Any other CSV column works too, e.g. <code>{department}</code>.</p>
 
         <div class="grid2">
-          <label id="recipientsLabel">Recipients (CSV) <span class="req">*</span>
-            <input type="file" name="recipients" id="recipientsFile" accept=".csv,text/csv" required />
-            <span class="hint" id="recipientsHint">Needs an <code>email</code> column; a <code>name</code> column is recommended.</span>
-          </label>
-          <label as="div">
-            <span style="display:flex;align-items:center;justify-content:space-between;margin-bottom:.35rem">
-              <span>Attachment</span>
-              <span style="display:flex;gap:.75rem;font-weight:normal;font-size:.85rem">
-                <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer">
-                  <input type="radio" name="attachType" value="file" id="attachTypeFile" checked /> File
-                </label>
-                <label style="display:flex;align-items:center;gap:.25rem;cursor:pointer">
-                  <input type="radio" name="attachType" value="payslips" id="attachTypePayslips" /> Protected payslips
-                </label>
-              </span>
-            </span>
+          <div id="recipientsLabel">
+            <label>Recipients (CSV) <span class="req">*</span>
+              <input type="file" name="recipients" id="recipientsFile" accept=".csv,text/csv" required />
+              <span class="hint" id="recipientsHint">Needs an <code>email</code> column; a <code>name</code> column is recommended.</span>
+            </label>
+          </div>
+          <div>
+            <div style="margin-bottom:.5rem;font-size:.9rem;font-weight:500">Attachment</div>
+            <div style="display:flex;gap:1.25rem;margin-bottom:.6rem">
+              <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-weight:normal">
+                <input type="radio" name="attachType" value="file" id="attachTypeFile" checked> Upload file
+              </label>
+              <label style="display:flex;align-items:center;gap:.3rem;cursor:pointer;font-weight:normal">
+                <input type="radio" name="attachType" value="payslips" id="attachTypePayslips"> Protected payslips
+              </label>
+            </div>
             <div id="attachFileWrap">
-              <input type="file" name="attachment" id="attachmentFile" />
+              <input type="file" name="attachment" id="attachmentFile" style="display:block;width:100%">
               <span class="hint" id="attachmentHint">Max 25 MB. The same file goes to everyone.</span>
             </div>
             <div id="attachPayslipsWrap" style="display:none">
@@ -232,7 +232,7 @@ The Payroll Team"></textarea>
               </select>
               <span class="hint">Each recipient gets their own password-protected PDF.</span>
             </div>
-          </label>
+          </div>
         </div>
 
         <div class="grid3">
