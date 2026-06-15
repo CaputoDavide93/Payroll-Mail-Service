@@ -16,6 +16,7 @@ import {
 import { startWorker, stopWorker } from './src/worker.js';
 import { preparePayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
 import { getAnthropicApiKey } from './src/settings.js';
+import XLSX from 'xlsx';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -64,7 +65,7 @@ function sweepFailedAttempts() {
 setInterval(sweepFailedAttempts, 5 * 60 * 1000).unref();
 
 app.use('/api', (req, res, next) => {
-  if (!APP_PASSWORD || req.path === '/config') return next();
+  if (!APP_PASSWORD || req.path === '/config' || req.path === '/payslips/sample-excel') return next();
   const ip = req.ip || 'unknown';
   const rec = failedAttempts.get(ip);
   if (rec && rec.until > Date.now()) {
@@ -354,22 +355,20 @@ app.post('/api/payslips/send', wrap((req, res) => {
   res.json({ id, accepted: recipients.length });
 }));
 
-// Sample Excel download — returns a pre-filled .xlsx the user can use as a template
+// Sample Excel download — returns a template .xlsx with the required columns
 app.get('/api/payslips/sample-excel', (_req, res) => {
-  import('xlsx').then((XLSX) => {
-    const wb = XLSX.utils.book_new();
-    const ws = XLSX.utils.aoa_to_sheet([
-      ['EENo', 'FullName', 'NI No', 'Email Address'],
-      ['E001', 'Alice Smith', 'AB123456C', 'alice.smith@example.com'],
-      ['E002', 'Bob Jones',  'CD234567D', 'bob.jones@example.com'],
-      ['E003', 'Carol White', 'EF345678E', 'carol.white@example.com'],
-    ]);
-    XLSX.utils.book_append_sheet(wb, ws, 'Employees');
-    const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
-    res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
-    res.setHeader('Content-Disposition', 'attachment; filename="sample-employees.xlsx"');
-    res.send(buf);
-  });
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['EENo', 'FullName', 'NI No', 'Email Address'],
+    ['E001', 'Alice Smith',  'AB123456C', 'alice.smith@example.com'],
+    ['E002', 'Bob Jones',    'CD234567D', 'bob.jones@example.com'],
+    ['E003', 'Carol White',  'EF345678E', 'carol.white@example.com'],
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Employees');
+  const buf = XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' });
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', 'attachment; filename="sample-employees.xlsx"');
+  res.send(buf);
 });
 
 // Run management — list, delete one, delete all
