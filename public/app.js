@@ -99,6 +99,38 @@ $('#testBtn').addEventListener('click', async () => {
   }
 });
 
+// ---- Attachment type toggle ----
+async function loadPayslipRuns() {
+  const sel = $('#payslipRunSelect');
+  try {
+    const headers = {};
+    if (appPassword) headers['x-app-password'] = appPassword;
+    const runs = await fetch('/api/payslips/runs', { headers }).then((r) => r.json());
+    sel.innerHTML = '<option value="">— select a prepared run —</option>';
+    if (!runs.length) {
+      sel.innerHTML += '<option disabled>No prepared runs found — use the Payslips page first</option>';
+    } else {
+      runs.forEach((r) => {
+        const opt = document.createElement('option');
+        opt.value = r.run_id;
+        opt.textContent = `${r.run_id} — ${r.total} payslips`;
+        sel.appendChild(opt);
+      });
+    }
+  } catch { /* ignore */ }
+}
+
+document.querySelectorAll('input[name="attachType"]').forEach((radio) => {
+  radio.addEventListener('change', () => {
+    const isPayslips = $('#attachTypePayslips').checked;
+    $('#attachFileWrap').style.display = isPayslips ? 'none' : '';
+    $('#attachPayslipsWrap').style.display = isPayslips ? '' : 'none';
+    $('#recipientsFile').required = !isPayslips;
+    $('#recipientsLabel').style.display = isPayslips ? 'none' : '';
+    if (isPayslips) loadPayslipRuns();
+  });
+});
+
 // ---- New campaign ----
 $('#recipientsFile').addEventListener('change', (e) => {
   const file = e.target.files[0];
@@ -123,11 +155,20 @@ $('#campaignForm').addEventListener('submit', async (e) => {
   const st = $('#campaignStatus');
   const btn = $('#createBtn');
 
+  const isPayslips = $('#attachTypePayslips').checked;
+  const run_id = $('#payslipRunSelect').value;
+
+  if (isPayslips && !run_id) {
+    st.className = 'status err'; st.textContent = 'Please select a prepared payslips run.';
+    return;
+  }
+
   const fd = new FormData(form);
   // Convert the local schedule time to an absolute UTC instant for the server.
   const sched = $('#scheduledStart').value;
   fd.set('scheduled_start', sched ? new Date(sched).toISOString() : '');
   fd.set('as_draft', $('#asDraft').checked ? 'true' : 'false');
+  if (isPayslips) fd.set('run_id', run_id);
 
   btn.disabled = true;
   st.className = 'status'; st.textContent = 'Uploading…';
@@ -142,6 +183,11 @@ $('#campaignForm').addEventListener('submit', async (e) => {
     if (data.skipped && data.skipped.length) msg += ` ${data.skipped.length} row(s) skipped.`;
     st.textContent = msg;
     form.reset();
+    $('#attachTypeFile').checked = true;
+    $('#attachFileWrap').style.display = '';
+    $('#attachPayslipsWrap').style.display = 'none';
+    $('#recipientsFile').required = true;
+    $('#recipientsLabel').style.display = '';
     $('#recipientsHint').innerHTML = 'Needs an <code>email</code> column; a <code>name</code> column is recommended.';
     $('#attachmentHint').textContent = 'Max 25 MB. The same file goes to everyone.';
     loadCampaigns();
