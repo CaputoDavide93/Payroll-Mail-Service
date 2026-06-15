@@ -126,8 +126,33 @@ app.post('/api/campaigns', upload.fields([
   if (!b.name?.trim()) throw new Error('Please give the campaign a name.');
   if (!b.subject?.trim()) throw new Error('Please enter a subject line.');
   if (!b.body?.trim()) throw new Error('Please write the email body.');
-  if (!csvFile) throw new Error('Please upload a recipients CSV file.');
 
+  const scheduled = b.scheduled_start?.trim() ? toSqlTime(b.scheduled_start) : null;
+  const asDraft = b.as_draft === 'true' || b.as_draft === true;
+  const status = asDraft ? 'draft' : (scheduled ? 'scheduled' : 'running');
+  const base = {
+    name: b.name.trim(), subject: b.subject.trim(), body: b.body,
+    from_name: (b.from_name || '').trim(), from_email: (b.from_email || '').trim(),
+    batch_size: Math.max(1, intField(b.batch_size, 10)),
+    batch_interval_seconds: Math.max(0, intField(b.batch_interval_seconds, 60)),
+    scheduled_start: scheduled, status
+  };
+
+  // Payslips run mode — per-recipient password-protected PDFs
+  if (b.run_id) {
+    const outcome = loadRunResults(b.run_id);
+    if (!outcome.results?.length) throw new Error('No prepared payslips found in that run.');
+    const recipients = outcome.results.map((r) => ({
+      email: r.email, name: r.name,
+      attachment_path: r.protected_path,
+      fields_json: JSON.stringify({ name: r.name, email: r.email, filename: r.filename })
+    }));
+    const id = createCampaign({ ...base, attachment_path: null, attachment_name: null }, recipients);
+    return res.json({ id, accepted: recipients.length, skipped: [] });
+  }
+
+  // Normal mode — CSV + optional shared attachment
+  if (!csvFile) throw new Error('Please upload a recipients CSV file.');
   const { recipients, errors } = parseRecipients(csvFile.buffer);
   if (recipients.length === 0) {
     throw new Error('No valid recipients found. ' + (errors[0] || ''));
@@ -143,24 +168,7 @@ app.post('/api/campaigns', upload.fields([
     attachment_name = attachFile.originalname;
   }
 
-  const scheduled = b.scheduled_start?.trim() ? toSqlTime(b.scheduled_start) : null;
-  const asDraft = b.as_draft === 'true' || b.as_draft === true;
-  const status = asDraft ? 'draft' : (scheduled ? 'scheduled' : 'running');
-
-  const id = createCampaign({
-    name: b.name.trim(),
-    subject: b.subject.trim(),
-    body: b.body,
-    from_name: (b.from_name || '').trim(),
-    from_email: (b.from_email || '').trim(),
-    attachment_path,
-    attachment_name,
-    batch_size: Math.max(1, intField(b.batch_size, 10)),
-    batch_interval_seconds: Math.max(0, intField(b.batch_interval_seconds, 60)),
-    scheduled_start: scheduled,
-    status
-  }, recipients);
-
+  const id = createCampaign({ ...base, attachment_path, attachment_name }, recipients);
   res.json({ id, accepted: recipients.length, skipped: errors });
 }));
 
