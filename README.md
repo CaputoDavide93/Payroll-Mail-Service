@@ -84,6 +84,11 @@ To stop: `docker compose down` — your data survives in the `mail-data` Docker 
 npm install
 npm start
 # open http://localhost:3000
+
+### Run Tests
+
+```bash
+npm test
 ```
 
 ---
@@ -122,6 +127,8 @@ A ready-to-edit `sample-recipients.csv` is included.
 4. Optionally set a **schedule start** time, or tick **"Create without sending (draft)"**
 5. Click **Create & send** — you can close the browser, sending continues on the server
 
+> Timezones: The API accepts a client offset (`scheduled_timezone_offset_minutes` or header `x-timezone-offset`) when scheduling campaigns so start times are stored in UTC correctly even if the server is in a different timezone.
+
 Use **Send preview** on any campaign to email yourself the rendered message with the real attachment before it goes to 600 people.
 
 ---
@@ -155,6 +162,7 @@ A dedicated workflow for sending each employee their own password-protected PDF 
 - NI numbers are **never** stored, logged, or returned by any API — used only at the moment of PDF encryption
 - Raw (unprotected) PDFs are deleted from disk as soon as protection completes
 - Set `ANTHROPIC_API_KEY` as an environment variable — it is not entered via the UI
+- ZIP uploads are capped (200 MB total, 25 MB per PDF, 500 files) to prevent ZIP bombs; preparation runs in an isolated worker with a safety timeout.
 
 ### Navigate to Payslips
 

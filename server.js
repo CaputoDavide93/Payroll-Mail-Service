@@ -17,6 +17,8 @@ import { startWorker, stopWorker } from './src/worker.js';
 import { preparePayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
 import { getAnthropicApiKey } from './src/settings.js';
 import XLSX from 'xlsx';
+import { Worker } from 'node:worker_threads';
+import { toSqlTime } from './src/time.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -53,13 +55,16 @@ function passwordMatches(supplied) {
 }
 
 // Lightweight per-IP throttle to blunt brute-force attempts.
-const failedAttempts = new Map(); // ip -> { count, until }
+const failedAttempts = new Map(); // ip -> { count, until, last }
+const FAILED_TTL_MS = 10 * 60 * 1000;
 
 // Sweep entries whose lockout window has expired so the map doesn't grow forever.
 function sweepFailedAttempts() {
   const now = Date.now();
   for (const [ip, rec] of failedAttempts) {
-    if (rec.until > 0 && rec.until <= now) failedAttempts.delete(ip);
+    if ((rec.until > 0 && rec.until <= now) || (rec.last && rec.last + FAILED_TTL_MS <= now)) {
+      failedAttempts.delete(ip);
+    }
   }
 }
 setInterval(sweepFailedAttempts, 5 * 60 * 1000).unref();
@@ -74,11 +79,11 @@ app.use('/api', (req, res, next) => {
   if (passwordMatches(req.get('x-app-password'))) {
     // Clear the lockout window but keep the count so the IP doesn't reset its budget
     const existing = failedAttempts.get(ip);
-    if (existing) failedAttempts.set(ip, { count: existing.count, until: 0 });
+    if (existing) failedAttempts.set(ip, { count: existing.count, until: 0, last: Date.now() });
     return next();
   }
   const count = (rec?.count || 0) + 1;
-  failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0 });
+  failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0, last: Date.now() });
   res.status(401).json({ error: 'Unauthorized' });
 });
 
@@ -127,7 +132,12 @@ app.post('/api/campaigns', upload.fields([
   if (!b.subject?.trim()) throw new Error('Please enter a subject line.');
   if (!b.body?.trim()) throw new Error('Please write the email body.');
 
-  const scheduled = b.scheduled_start?.trim() ? toSqlTime(b.scheduled_start) : null;
+  const offset = (() => {
+    const raw = b.scheduled_timezone_offset_minutes ?? b.scheduled_tz_offset ?? req.get('x-timezone-offset');
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  })();
+  const scheduled = b.scheduled_start?.trim() ? toSqlTime(b.scheduled_start, offset) : null;
   const asDraft = b.as_draft === 'true' || b.as_draft === true;
   const status = asDraft ? 'draft' : (scheduled ? 'scheduled' : 'running');
   const base = {
@@ -241,14 +251,6 @@ app.delete('/api/campaigns/:id', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
-// Convert an <input type="datetime-local"> value to "YYYY-MM-DD HH:MM:SS" (UTC for SQLite).
-// Throws on invalid input so callers get a clear error instead of a silent null→running campaign.
-function toSqlTime(local) {
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) throw new Error(`Invalid scheduled start date: "${local}".`);
-  return d.toISOString().replace('T', ' ').slice(0, 19);
-}
-
 // Parse an integer field, keeping a deliberate 0 (unlike `Number(x) || default`).
 function intField(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -290,6 +292,36 @@ function loadRunResults(run_id) {
   }
 }
 
+// Run the heavy payslip preparation pipeline off the main thread so long jobs don't block
+// the event loop. Returns the pipeline outcome or throws if the worker fails.
+function runPayslipJob(excelBuffer, zipBuffer, apiKey) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./src/payslipJobWorker.js', import.meta.url), {
+      workerData: { excel: excelBuffer, zip: zipBuffer, apiKey }
+    });
+
+    const timeout = setTimeout(() => {
+      worker.terminate().catch(() => {});
+      reject(new Error('Payslip preparation timed out. Please try a smaller batch.'));
+    }, 120_000); // 2 minutes
+
+    worker.once('message', (msg) => {
+      clearTimeout(timeout);
+      if (msg?.ok) return resolve(msg.result);
+      reject(new Error(msg?.error || 'Payslip preparation failed.'));
+    });
+
+    worker.once('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    worker.once('exit', (code) => {
+      if (code !== 0) reject(new Error('Payslip preparation worker exited unexpectedly.'));
+    });
+  });
+}
+
 // Step 1: Upload Excel + ZIP, run AI-match + protect pipeline.
 app.post('/api/payslips/prepare', payslipsUpload.fields([
   { name: 'excel', maxCount: 1 },
@@ -301,7 +333,7 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
   if (!zipFile) throw new Error('Please upload the ZIP file (PDFs).');
 
   const apiKey = getAnthropicApiKey();
-  const outcome = await preparePayslips(excelFile.buffer, zipFile.buffer, apiKey);
+  const outcome = await runPayslipJob(excelFile.buffer, zipFile.buffer, apiKey);
 
   // Persist results — NI numbers are NOT in outcome.results (stripped in preparePayslips)
   const resultFile = path.join(PAYSLIPS_DIR, outcome.run_id, 'results.json');

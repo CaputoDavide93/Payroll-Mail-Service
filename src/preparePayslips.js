@@ -11,6 +11,11 @@ import { getAnthropicApiKey } from './settings.js';
 
 const execFileAsync = promisify(execFile);
 
+// Limits to guard against ZIP bombs and oversized uploads
+const MAX_UNZIPPED_BYTES = 200 * 1024 * 1024; // 200 MB across all files
+const MAX_FILES = 500;
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB per PDF
+
 export const PAYSLIPS_DIR = path.join(DATA_DIR, 'payslips');
 
 // Verify qpdf is available before attempting any protection.
@@ -49,6 +54,7 @@ export function extractZip(buffer, destFolder) {
   const zip = new AdmZip(buffer);
   const extracted = [];
   const seen = new Set();
+  let totalBytes = 0;
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
     if (path.extname(entry.entryName).toLowerCase() !== '.pdf') continue;
@@ -56,9 +62,17 @@ export function extractZip(buffer, destFolder) {
     if (!SAFE_FILENAME_RE.test(safeName)) continue;
     const key = safeName.toLowerCase();
     if (seen.has(key)) throw new Error(`Duplicate PDF filename in ZIP: ${safeName}`);
+    const declaredSize = entry.header?.size || 0; // uncompressed size
+    if (declaredSize > MAX_FILE_BYTES) throw new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`);
+    const data = entry.getData();
+    const realSize = data.length;
+    if (realSize > MAX_FILE_BYTES) throw new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`);
+    if (totalBytes + realSize > MAX_UNZIPPED_BYTES) throw new Error('ZIP too large: total uncompressed size exceeds 200 MB.');
     seen.add(key);
+    totalBytes += realSize;
+    if (extracted.length + 1 > MAX_FILES) throw new Error(`ZIP has too many files (>${MAX_FILES}).`);
     const outPath = path.join(destFolder, safeName);
-    fs.writeFileSync(outPath, entry.getData());
+    fs.writeFileSync(outPath, data);
     extracted.push(safeName);
   }
   return extracted;

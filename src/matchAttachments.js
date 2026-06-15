@@ -34,6 +34,8 @@ function fuzzyMatch(name, filenames, usedFiles) {
   return null;
 }
 
+const AI_TIMEOUT_MS = 30_000;
+
 async function aiMatch(recipients, filenames, apiKey) {
   const prompt = `You are matching payroll attachment files to employee recipients.
 
@@ -50,6 +52,8 @@ Return ONLY a JSON array — no explanation, no markdown. Format:
 
 Only include recipients you matched. Skip unmatched ones.`;
 
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(new Error('AI matching timed out')), AI_TIMEOUT_MS);
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -61,8 +65,10 @@ Only include recipients you matched. Skip unmatched ones.`;
       model: 'claude-sonnet-4-6',
       max_tokens: 4096,
       messages: [{ role: 'user', content: prompt }]
-    })
+    }),
+    signal: controller.signal
   });
+  clearTimeout(timer);
 
   if (!res.ok) {
     throw new Error(`Claude API error ${res.status}`);  // don't surface raw API response
