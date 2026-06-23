@@ -138,10 +138,13 @@ $('#prepareBtn').addEventListener('click', async () => {
     if (!res.ok) throw new Error(data.error || 'Prepare failed.');
 
     currentRunId = data.run_id;
-    // Reset pre-flight on new prepare
+    // Reset state for new prepare
     $('#preflightResult').textContent = '';
     $('#preflightStatus').textContent = '';
-    renderMatchResults(data);
+    $('#approveStatus').textContent = '';
+    $('#preflightBtn').disabled = true;
+    $('#sendSetupBtn').disabled = true;
+    renderReviewTable(data);
     st.textContent = '';
     showStep(2);
     loadRuns();
@@ -153,35 +156,75 @@ $('#prepareBtn').addEventListener('click', async () => {
   }
 });
 
-function renderMatchResults(data) {
-  const { matched, unmatched, unmatched_files, protect_errors, ai_errors } = data;
+// Tracks which employee emails are still approved (deleted rows remove from this set)
+let approvedEmails = new Set();
+
+function updateApproveBtn() {
+  const n = approvedEmails.size;
+  const btn = $('#approveBtn');
+  btn.disabled = n === 0;
+  btn.textContent = `Approve & Protect ${n} payslip${n === 1 ? '' : 's'} →`;
+}
+
+function renderReviewTable(data) {
+  const { pending, unmatched, unmatched_files, no_ni, ai_errors } = data;
   const container = $('#matchResults');
   container.textContent = '';
+  approvedEmails = new Set((pending || []).map((p) => p.email));
 
-  if (matched.length > 0) {
-    container.appendChild(el('div', 'section-label', `Matched (${matched.length}) — PDFs protected and ready`));
+  if (pending && pending.length > 0) {
+    const lbl = el('div', 'section-label', `${pending.length} matched — spot-check names, NI numbers and files before approving`);
+    container.appendChild(lbl);
+
     const table = el('table', 'match-table');
     const thead = el('thead');
     const hr = el('tr');
-    ['Employee', 'Email', 'File', 'Confidence'].forEach((t) => hr.appendChild(el('th', null, t)));
+    ['Full Name', 'NI No', 'Email', 'PDF File', 'Confidence', ''].forEach((t) => hr.appendChild(el('th', null, t)));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = el('tbody');
-    for (const m of matched) {
+
+    for (const m of pending) {
       const tr = el('tr');
+      tr.dataset.email = m.email;
       tr.appendChild(el('td', null, m.name));
+      const niTd = el('td');
+      niTd.style.cssText = 'font-family:monospace;font-size:.85rem;letter-spacing:.04em';
+      niTd.textContent = m.ni_no;
+      tr.appendChild(niTd);
       tr.appendChild(el('td', null, m.email));
       tr.appendChild(el('td', null, m.filename));
       const confCls = m.confidence === 'high' ? 'badge-high' : m.confidence === 'medium' ? 'badge-medium' : 'badge-low';
       tr.appendChild(el('td', confCls, m.confidence));
+      const tdAct = el('td');
+      const delBtn = el('button', 'btn small danger');
+      delBtn.textContent = 'Remove';
+      delBtn.addEventListener('click', () => {
+        tr.style.opacity = '0.35';
+        tr.style.textDecoration = 'line-through';
+        delBtn.disabled = true;
+        approvedEmails.delete(m.email);
+        updateApproveBtn();
+      });
+      tdAct.appendChild(delBtn);
+      tr.appendChild(tdAct);
       tbody.appendChild(tr);
     }
     table.appendChild(tbody);
     container.appendChild(table);
   }
 
-  if (unmatched.length > 0) {
-    const lbl = el('div', 'section-label', `Unmatched recipients (${unmatched.length}) — will be skipped`);
+  if (no_ni && no_ni.length > 0) {
+    const lbl = el('div', 'section-label', `Missing NI No (${no_ni.length}) — cannot protect, will be skipped`);
+    lbl.style.color = '#b45309';
+    container.appendChild(lbl);
+    const ul = el('ul', 'warn-list');
+    for (const u of no_ni) ul.appendChild(el('li', null, `${u.name} <${u.email}>`));
+    container.appendChild(ul);
+  }
+
+  if (unmatched && unmatched.length > 0) {
+    const lbl = el('div', 'section-label', `Unmatched recipients (${unmatched.length}) — no PDF found`);
     lbl.style.color = '#b45309';
     container.appendChild(lbl);
     const ul = el('ul', 'warn-list');
@@ -190,22 +233,12 @@ function renderMatchResults(data) {
   }
 
   if (unmatched_files && unmatched_files.length > 0) {
-    const lbl = el('div', 'section-label', `Unmatched files (${unmatched_files.length}) — not sent`);
+    const lbl = el('div', 'section-label', `Unmatched files (${unmatched_files.length}) — not assigned`);
     lbl.style.color = '#999';
     container.appendChild(lbl);
     const ul = el('ul', 'warn-list');
     ul.style.color = '#999';
     for (const f of unmatched_files) ul.appendChild(el('li', null, f));
-    container.appendChild(ul);
-  }
-
-  if (protect_errors && protect_errors.length > 0) {
-    const lbl = el('div', 'section-label', `Protection errors (${protect_errors.length})`);
-    lbl.style.color = '#c00';
-    container.appendChild(lbl);
-    const ul = el('ul', 'warn-list');
-    ul.style.color = '#c00';
-    for (const e of protect_errors) ul.appendChild(el('li', null, `${e.email}: ${e.error}`));
     container.appendChild(ul);
   }
 
@@ -219,13 +252,41 @@ function renderMatchResults(data) {
     container.appendChild(ul);
   }
 
-  const noMatches = matched.length === 0;
-  if (noMatches) {
-    container.appendChild(el('p', 'status err', 'No payslips could be matched and protected. Check the files and try again.'));
+  if (!pending || pending.length === 0) {
+    container.appendChild(el('p', 'status err', 'No payslips could be matched. Check filenames against employee names and try again.'));
   }
-  $('#sendSetupBtn').disabled = noMatches;
-  $('#preflightBtn').disabled = noMatches;
+
+  updateApproveBtn();
 }
+
+// ---- Approve & Protect ----
+$('#approveBtn').addEventListener('click', async () => {
+  if (!currentRunId || !approvedEmails.size) return;
+  const st = $('#approveStatus');
+  const btn = $('#approveBtn');
+  btn.disabled = true;
+  st.className = 'status'; st.textContent = `Protecting ${approvedEmails.size} PDF${approvedEmails.size === 1 ? '' : 's'}…`;
+
+  try {
+    const data = await api(`/api/payslips/${currentRunId}/confirm`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ approved_emails: [...approvedEmails] })
+    });
+
+    let msg = `✓ ${data.protected_count} PDF${data.protected_count === 1 ? '' : 's'} protected.`;
+    if (data.protect_errors?.length) msg += ` ${data.protect_errors.length} failed — see below.`;
+    st.className = 'status ok'; st.textContent = msg;
+
+    btn.textContent = 'Protected ✓';
+    $('#preflightBtn').disabled = false;
+    $('#sendSetupBtn').disabled = false;
+    loadRuns();
+  } catch (err) {
+    st.className = 'status err'; st.textContent = 'Protection failed: ' + err.message;
+    btn.disabled = false;
+  }
+});
 
 // ---- Pre-flight check ----
 $('#preflightBtn').addEventListener('click', async () => {

@@ -14,7 +14,7 @@ import {
   campaignStats, failedRecipients, deleteCampaign, requeueFailed, firstRecipient
 } from './src/campaigns.js';
 import { startWorker, stopWorker } from './src/worker.js';
-import { preparePayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { preparePayslips, prepareForReview, confirmPayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
 import { getAnthropicApiKey } from './src/settings.js';
 import XLSX from 'xlsx';
 import { Worker } from 'node:worker_threads';
@@ -76,14 +76,20 @@ app.use('/api', (req, res, next) => {
   if (rec && rec.until > Date.now()) {
     return res.status(429).json({ error: 'Too many attempts. Wait a minute and try again.' });
   }
-  if (passwordMatches(req.get('x-app-password'))) {
+  const supplied = req.get('x-app-password');
+  if (passwordMatches(supplied)) {
     // Clear the lockout window but keep the count so the IP doesn't reset its budget
     const existing = failedAttempts.get(ip);
     if (existing) failedAttempts.set(ip, { count: existing.count, until: 0, last: Date.now() });
     return next();
   }
-  const count = (rec?.count || 0) + 1;
-  failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0, last: Date.now() });
+  // Only count as a failed attempt when a password was explicitly supplied but wrong.
+  // Missing header = unauthenticated page load — don't penalise the IP (multiple users
+  // on the same office NAT would otherwise exhaust each other's attempt budget).
+  if (supplied) {
+    const count = (rec?.count || 0) + 1;
+    failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0, last: Date.now() });
+  }
   res.status(401).json({ error: 'Unauthorized' });
 });
 
@@ -322,7 +328,8 @@ function runPayslipJob(excelBuffer, zipBuffer, apiKey) {
   });
 }
 
-// Step 1: Upload Excel + ZIP, run AI-match + protect pipeline.
+// Step 1: Upload Excel + ZIP → AI-match only. Returns pending matches for admin review.
+// PDF protection does NOT happen here — call /confirm after reviewing.
 app.post('/api/payslips/prepare', payslipsUpload.fields([
   { name: 'excel', maxCount: 1 },
   { name: 'zip', maxCount: 1 }
@@ -335,18 +342,27 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
   const apiKey = getAnthropicApiKey();
   const outcome = await runPayslipJob(excelFile.buffer, zipFile.buffer, apiKey);
 
-  // Persist results — NI numbers are NOT in outcome.results (stripped in preparePayslips)
-  const resultFile = path.join(PAYSLIPS_DIR, outcome.run_id, 'results.json');
-  const runName = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-  fs.writeFileSync(resultFile, JSON.stringify({ ...outcome, name: runName }));
-
   res.json({
     run_id: outcome.run_id,
-    matched: outcome.results.map((r) => ({ email: r.email, name: r.name, filename: r.filename, confidence: r.confidence })),
+    pending: outcome.pending,   // includes ni_no for admin spot-check
+    no_ni: outcome.no_ni,
     unmatched: outcome.unmatched,
     unmatched_files: outcome.unmatched_files,
-    protect_errors: outcome.protect_errors,
     ai_errors: outcome.ai_errors
+  });
+}));
+
+// Step 1b: Confirm reviewed matches → run qpdf → save results.json.
+app.post('/api/payslips/:runId/confirm', wrap(async (req, res) => {
+  const { runId } = req.params;
+  assertRunId(runId);
+  const { approved_emails } = req.body;
+  const outcome = await confirmPayslips(runId, approved_emails || null);
+  res.json({
+    run_id: outcome.run_id,
+    protected_count: outcome.results.length,
+    protect_errors: outcome.protect_errors,
+    name: outcome.name
   });
 }));
 

@@ -86,10 +86,18 @@
       <h2><span class="step-num">2</span> Review matches</h2>
       <div id="matchResults"></div>
 
-      <!-- Pre-flight check -->
+      <!-- Approve & Protect -->
       <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border,#e0e0e0)">
         <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-          <button id="preflightBtn" class="btn">🔍 Run AI pre-flight check</button>
+          <button id="approveBtn" class="btn primary" disabled>Approve &amp; Protect →</button>
+          <span id="approveStatus" class="status muted" style="font-size:.875rem"></span>
+        </div>
+      </div>
+
+      <!-- Pre-flight check (available after protection) -->
+      <div style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--border,#e0e0e0)">
+        <div style="display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
+          <button id="preflightBtn" class="btn" disabled>🔍 Run AI pre-flight check</button>
           <span id="preflightStatus" class="status muted" style="font-size:.875rem"></span>
         </div>
         <div id="preflightResult"></div>
@@ -97,7 +105,7 @@
 
       <div style="margin-top:1.25rem">
         <button id="backBtn" class="btn">← Back</button>
-        <button id="sendSetupBtn" class="btn primary" style="margin-left:.5rem">Set up email →</button>
+        <button id="sendSetupBtn" class="btn primary" style="margin-left:.5rem" disabled>Set up email →</button>
       </div>
     </div>
 

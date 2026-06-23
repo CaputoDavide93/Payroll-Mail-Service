@@ -249,6 +249,105 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
   }
 }
 
+/**
+ * Phase 1: parse Excel + extract ZIP → AI-match → save pending.json with NI nos.
+ * Returns matches for admin review WITHOUT running qpdf.
+ */
+export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
+  await assertQpdf();
+
+  const runId = Date.now().toString(36) + randomBytes(4).toString('hex');
+  const rawDir = path.join(PAYSLIPS_DIR, runId, 'raw');
+  const protectedDir = path.join(PAYSLIPS_DIR, runId, 'protected');
+  fs.mkdirSync(rawDir, { recursive: true });
+  fs.mkdirSync(protectedDir, { recursive: true });
+
+  try {
+    const recipients = parseExcel(xlsxBuffer);
+    if (!recipients.length) throw new Error('No valid recipients found in Excel file.');
+
+    extractZip(zipBuffer, rawDir);
+
+    const { matched, unmatched, unmatched_files, ai_errors } = await matchAttachments(
+      recipients.map((r) => ({ email: r.email, name: r.name })),
+      rawDir,
+      apiKey
+    );
+
+    const recipientMap = new Map(recipients.map((r) => [r.email.toLowerCase(), r]));
+    const pending = [];
+    const no_ni = [];
+
+    for (const m of matched) {
+      const rec = recipientMap.get(m.email.toLowerCase());
+      if (!rec?.ni_no) { no_ni.push({ email: m.email, name: m.name }); continue; }
+      pending.push({ email: m.email, name: m.name, ni_no: rec.ni_no, filename: m.filename, path: m.path, confidence: m.confidence });
+    }
+
+    // Persist pending state (includes NI nos — server-side only, deleted after confirm)
+    const pendingFile = path.join(PAYSLIPS_DIR, runId, 'pending.json');
+    fs.writeFileSync(pendingFile, JSON.stringify({ pending, unmatched, unmatched_files, ai_errors, no_ni }));
+
+    return {
+      run_id: runId,
+      // NI nos returned here for admin spot-check UI (protected by APP_PASSWORD + IP restriction)
+      pending: pending.map((p) => ({ email: p.email, name: p.name, ni_no: p.ni_no, filename: p.filename, confidence: p.confidence })),
+      no_ni,
+      unmatched,
+      unmatched_files,
+      ai_errors
+    };
+  } catch (err) {
+    fs.rmSync(path.join(PAYSLIPS_DIR, runId), { recursive: true, force: true });
+    throw err;
+  }
+}
+
+/**
+ * Phase 2: run qpdf on approved subset → save results.json.
+ * approvedEmails: optional array — null means approve all pending.
+ */
+export async function confirmPayslips(runId, approvedEmails) {
+  const runDir = path.join(PAYSLIPS_DIR, runId);
+  const pendingFile = path.join(runDir, 'pending.json');
+  if (!fs.existsSync(pendingFile)) throw new Error('No pending review found for this run. Please re-upload your files.');
+
+  const { pending, unmatched, unmatched_files, ai_errors } = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+
+  const approvedSet = approvedEmails ? new Set(approvedEmails.map((e) => e.toLowerCase())) : null;
+  const toProtect = approvedSet ? pending.filter((p) => approvedSet.has(p.email.toLowerCase())) : pending;
+  if (!toProtect.length) throw new Error('No payslips selected for protection.');
+
+  const protectedDir = path.join(runDir, 'protected');
+  const rawDir = path.join(runDir, 'raw');
+  const results = [];
+  const protect_errors = [];
+
+  for (const m of toProtect) {
+    const outName = path.basename(m.filename, '.pdf') + '_protected.pdf';
+    const outPath = path.join(protectedDir, outName);
+    try {
+      await protectPdf(m.path, outPath, m.ni_no);
+      results.push({ email: m.email, name: m.name, filename: outName, protected_path: outPath, confidence: m.confidence });
+    } catch (err) {
+      protect_errors.push({ email: m.email, error: err.message });
+    }
+  }
+
+  fs.rmSync(rawDir, { recursive: true, force: true });
+  try { fs.unlinkSync(pendingFile); } catch { /* ignore */ }
+
+  if (!results.length) {
+    fs.rmSync(protectedDir, { recursive: true, force: true });
+    throw new Error('All PDF protections failed. Check qpdf is installed correctly.');
+  }
+
+  const runName = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const outcome = { results, unmatched, unmatched_files, protect_errors, ai_errors: ai_errors || [], run_id: runId, name: runName };
+  fs.writeFileSync(path.join(runDir, 'results.json'), JSON.stringify(outcome));
+  return outcome;
+}
+
 // ---- Run management ----
 
 export function listRuns() {
