@@ -65,11 +65,17 @@ export function extractZip(buffer, destFolder) {
   const extracted = [];
   const seen = new Set();
   let totalBytes = 0;
-  for (const entry of zip.getEntries()) {
-    if (entry.isDirectory) continue;
-    if (path.extname(entry.entryName).toLowerCase() !== '.pdf') continue;
+  const diag = { entries: 0, dirs: 0, nonPdf: 0, emptyName: 0, exts: {}, samples: [] };
+  const allEntries = zip.getEntries();
+  diag.entries = allEntries.length;
+  for (const entry of allEntries) {
+    if (diag.samples.length < 5) diag.samples.push(entry.entryName);
+    if (entry.isDirectory) { diag.dirs++; continue; }
+    const ext = path.extname(entry.entryName).toLowerCase();
+    diag.exts[ext] = (diag.exts[ext] || 0) + 1;
+    if (ext !== '.pdf') { diag.nonPdf++; continue; }
     const safeName = sanitizePdfName(entry.entryName);
-    if (!safeName || safeName.toLowerCase() === '.pdf') continue; // nothing left after cleaning
+    if (!safeName || safeName.toLowerCase() === '.pdf') { diag.emptyName++; continue; } // nothing left after cleaning
     const key = safeName.toLowerCase();
     if (seen.has(key)) throw new Error(`Duplicate PDF filename in ZIP: ${safeName}`);
     const declaredSize = entry.header?.size || 0; // uncompressed size
@@ -85,6 +91,7 @@ export function extractZip(buffer, destFolder) {
     fs.writeFileSync(outPath, data);
     extracted.push(safeName);
   }
+  if (extracted.length === 0) console.error('[extractZip] 0 PDFs extracted — diag:', JSON.stringify(diag));
   return extracted;
 }
 
