@@ -267,7 +267,7 @@ function intField(value, fallback) {
 // ---- Payslips ----
 const payslipsUpload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 100 * 1024 * 1024 },
+  limits: { fileSize: 300 * 1024 * 1024 }, // large payslip ZIPs (150+ PDFs) exceeded the old 100MB cap
   fileFilter(_req, file, cb) {
     // SheetJS (XLSX.read) parses xlsx/xls/xlsm/xlsb/ods/csv — accept any spreadsheet type.
     // Browsers send inconsistent mimetypes, so fall back to extension when the type is generic.

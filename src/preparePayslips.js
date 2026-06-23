@@ -3,7 +3,7 @@ import path from 'node:path';
 import { randomBytes } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import AdmZip from 'adm-zip';
+import yauzl from 'yauzl';
 import * as XLSX from 'xlsx';
 import { matchAttachments } from './matchAttachments.js';
 import { DATA_DIR } from './db.js';
@@ -59,40 +59,78 @@ export function parseExcel(buffer) {
   }).filter((r) => r.email && r.name);
 }
 
+const ZIP_UNREADABLE = 'Could not read the ZIP file — it may be corrupted, truncated, or an unsupported format.';
+
+// Extract PDFs from a ZIP using yauzl (streaming): handles zip64/large archives that
+// adm-zip silently fails on, and throws a clear error on corruption/truncation instead
+// of returning nothing. Async — callers must await.
 export function extractZip(buffer, destFolder) {
   fs.mkdirSync(destFolder, { recursive: true });
-  const zip = new AdmZip(buffer);
-  const extracted = [];
-  const seen = new Set();
-  let totalBytes = 0;
-  const diag = { entries: 0, dirs: 0, nonPdf: 0, emptyName: 0, exts: {}, samples: [] };
-  const allEntries = zip.getEntries();
-  diag.entries = allEntries.length;
-  for (const entry of allEntries) {
-    if (diag.samples.length < 5) diag.samples.push(entry.entryName);
-    if (entry.isDirectory) { diag.dirs++; continue; }
-    const ext = path.extname(entry.entryName).toLowerCase();
-    diag.exts[ext] = (diag.exts[ext] || 0) + 1;
-    if (ext !== '.pdf') { diag.nonPdf++; continue; }
-    const safeName = sanitizePdfName(entry.entryName);
-    if (!safeName || safeName.toLowerCase() === '.pdf') { diag.emptyName++; continue; } // nothing left after cleaning
-    const key = safeName.toLowerCase();
-    if (seen.has(key)) throw new Error(`Duplicate PDF filename in ZIP: ${safeName}`);
-    const declaredSize = entry.header?.size || 0; // uncompressed size
-    if (declaredSize > MAX_FILE_BYTES) throw new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`);
-    const data = entry.getData();
-    const realSize = data.length;
-    if (realSize > MAX_FILE_BYTES) throw new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`);
-    if (totalBytes + realSize > MAX_UNZIPPED_BYTES) throw new Error('ZIP too large: total uncompressed size exceeds 200 MB.');
-    seen.add(key);
-    totalBytes += realSize;
-    if (extracted.length + 1 > MAX_FILES) throw new Error(`ZIP has too many files (>${MAX_FILES}).`);
-    const outPath = path.join(destFolder, safeName);
-    fs.writeFileSync(outPath, data);
-    extracted.push(safeName);
-  }
-  if (extracted.length === 0) console.error('[extractZip] 0 PDFs extracted — diag:', JSON.stringify(diag));
-  return extracted;
+  return new Promise((resolve, reject) => {
+    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
+      if (err || !zipfile) return reject(new Error(ZIP_UNREADABLE));
+
+      const extracted = [];
+      const seen = new Set();
+      let totalBytes = 0;
+      let settled = false;
+      const diag = { entries: 0, dirs: 0, nonPdf: 0, emptyName: 0, exts: {}, samples: [] };
+      const fail = (e) => { if (!settled) { settled = true; reject(e); } };
+
+      zipfile.on('error', () => fail(new Error(ZIP_UNREADABLE)));
+
+      zipfile.on('entry', (entry) => {
+        if (settled) return;
+        diag.entries++;
+        const name = entry.fileName;
+        if (diag.samples.length < 5) diag.samples.push(name);
+
+        if (/\/$/.test(name)) { diag.dirs++; return zipfile.readEntry(); } // directory entry
+        const ext = path.extname(name).toLowerCase();
+        diag.exts[ext] = (diag.exts[ext] || 0) + 1;
+        if (ext !== '.pdf') { diag.nonPdf++; return zipfile.readEntry(); }
+
+        const safeName = sanitizePdfName(name);
+        if (!safeName || safeName.toLowerCase() === '.pdf') { diag.emptyName++; return zipfile.readEntry(); }
+        const key = safeName.toLowerCase();
+        if (seen.has(key)) return fail(new Error(`Duplicate PDF filename in ZIP: ${safeName}`));
+
+        const declaredSize = entry.uncompressedSize || 0;
+        if (declaredSize > MAX_FILE_BYTES) return fail(new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`));
+        if (totalBytes + declaredSize > MAX_UNZIPPED_BYTES) return fail(new Error('ZIP too large: total uncompressed size exceeds 200 MB.'));
+        if (extracted.length + 1 > MAX_FILES) return fail(new Error(`ZIP has too many files (>${MAX_FILES}).`));
+        seen.add(key);
+
+        zipfile.openReadStream(entry, (err2, stream) => {
+          if (err2 || !stream) return fail(new Error(ZIP_UNREADABLE));
+          const chunks = [];
+          let size = 0;
+          stream.on('data', (c) => {
+            size += c.length;
+            if (size > MAX_FILE_BYTES) { stream.destroy(); return fail(new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`)); }
+            chunks.push(c);
+          });
+          stream.on('error', () => fail(new Error(ZIP_UNREADABLE)));
+          stream.on('end', () => {
+            if (settled) return;
+            totalBytes += size;
+            fs.writeFileSync(path.join(destFolder, safeName), Buffer.concat(chunks));
+            extracted.push(safeName);
+            zipfile.readEntry();
+          });
+        });
+      });
+
+      zipfile.on('end', () => {
+        if (settled) return;
+        settled = true;
+        if (extracted.length === 0) console.error('[extractZip] 0 PDFs extracted — diag:', JSON.stringify(diag));
+        resolve(extracted);
+      });
+
+      zipfile.readEntry();
+    });
+  });
 }
 
 export async function protectPdf(inputPath, outputPath, password) {
@@ -212,7 +250,7 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
     if (recipients.length === 0) throw new Error('No valid recipients found in Excel file.');
 
     // 2. Extract PDFs from ZIP
-    const extractedFiles = extractZip(zipBuffer, rawDir);
+    const extractedFiles = await extractZip(zipBuffer, rawDir);
     if (extractedFiles.length === 0) throw new Error('No valid PDF files found in the uploaded ZIP.');
     extractionDone = true;
 
@@ -283,7 +321,7 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
     const recipients = parseExcel(xlsxBuffer);
     if (!recipients.length) throw new Error('No valid recipients found in Excel file.');
 
-    const extractedFiles = extractZip(zipBuffer, rawDir);
+    const extractedFiles = await extractZip(zipBuffer, rawDir);
     if (extractedFiles.length === 0) throw new Error('No valid PDF files found in the uploaded ZIP.');
 
     const { matched, unmatched, unmatched_files, ai_errors } = await matchAttachments(
