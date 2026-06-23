@@ -36,4 +36,25 @@ describe('extractZip limits', () => {
     assert.ok(fs.existsSync(path.join(dir, 'ok.pdf')));
     fs.rmSync(dir, { recursive: true, force: true });
   });
+
+  it('cleans real-world filenames instead of dropping them', () => {
+    const buf = makeZip([
+      { name: 'Payslip (June 2026).pdf', data: Buffer.from('%PDF-1.4') },
+      { name: "O'Brien, Se\u00e1n.pdf", data: Buffer.from('%PDF-1.4') }
+    ]);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'payslip-'));
+    const files = extractZip(buf, dir);
+    assert.deepEqual(files.slice().sort(), ["O'Brien, Sean.pdf", 'Payslip (June 2026).pdf'].sort());
+    files.forEach((f) => assert.ok(fs.existsSync(path.join(dir, f))));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('strips directory components (no traversal)', () => {
+    const buf = makeZip([{ name: '../../etc/evil.pdf', data: Buffer.from('%PDF-1.4') }]);
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'payslip-'));
+    const files = extractZip(buf, dir);
+    assert.deepEqual(files, ['evil.pdf']);
+    assert.ok(fs.existsSync(path.join(dir, 'evil.pdf')));
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
 });

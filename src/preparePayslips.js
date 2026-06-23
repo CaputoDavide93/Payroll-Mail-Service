@@ -27,8 +27,18 @@ async function assertQpdf() {
   }
 }
 
-// Must start with a word char (prevents dot-leading filenames like .hidden.pdf).
-const SAFE_FILENAME_RE = /^[\w][\w. -]*\.pdf$/i;
+// Clean a ZIP entry name into a safe, usable on-disk filename instead of rejecting it.
+// Handles real-world payslip names: accents (José), parens, apostrophes, commas, spaces.
+// path.basename strips any directory components first (no traversal).
+function sanitizePdfName(entryName) {
+  let base = path.basename(entryName);
+  base = base.normalize('NFKD').replace(/[\u0300-\u036f]/g, ''); // strip accents: Jose
+  base = base.replace(/[\x00-\x1f\x7f]/g, '');                    // drop control chars
+  base = base.replace(/[\\/:*?"<>|]/g, '_');                      // swap filesystem-hostile chars
+  base = base.replace(/^[.\s]+/, '').trim();                      // no leading dots/space (hidden/traversal)
+  base = base.replace(/\s+/g, ' ');                               // collapse whitespace
+  return base;
+}
 
 export function parseExcel(buffer) {
   const wb = XLSX.read(buffer, { type: 'buffer' });
@@ -58,8 +68,8 @@ export function extractZip(buffer, destFolder) {
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
     if (path.extname(entry.entryName).toLowerCase() !== '.pdf') continue;
-    const safeName = path.basename(entry.entryName);
-    if (!SAFE_FILENAME_RE.test(safeName)) continue;
+    const safeName = sanitizePdfName(entry.entryName);
+    if (!safeName || safeName.toLowerCase() === '.pdf') continue; // nothing left after cleaning
     const key = safeName.toLowerCase();
     if (seen.has(key)) throw new Error(`Duplicate PDF filename in ZIP: ${safeName}`);
     const declaredSize = entry.header?.size || 0; // uncompressed size
@@ -266,7 +276,8 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
     const recipients = parseExcel(xlsxBuffer);
     if (!recipients.length) throw new Error('No valid recipients found in Excel file.');
 
-    extractZip(zipBuffer, rawDir);
+    const extractedFiles = extractZip(zipBuffer, rawDir);
+    if (extractedFiles.length === 0) throw new Error('No valid PDF files found in the uploaded ZIP.');
 
     const { matched, unmatched, unmatched_files, ai_errors } = await matchAttachments(
       recipients.map((r) => ({ email: r.email, name: r.name })),

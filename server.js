@@ -269,13 +269,22 @@ const payslipsUpload = multer({
   storage: multer.memoryStorage(),
   limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter(_req, file, cb) {
+    // SheetJS (XLSX.read) parses xlsx/xls/xlsm/xlsb/ods/csv — accept any spreadsheet type.
+    // Browsers send inconsistent mimetypes, so fall back to extension when the type is generic.
+    const excelExts = ['.xlsx', '.xls', '.xlsm', '.xlsb', '.ods', '.csv'];
     const allowed = {
       excel: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-               'application/vnd.ms-excel', 'application/octet-stream'],
+               'application/vnd.ms-excel',
+               'application/vnd.ms-excel.sheet.macroenabled.12',
+               'application/vnd.openxmlformats-officedocument.spreadsheetml.template',
+               'application/vnd.oasis.opendocument.spreadsheet',
+               'text/csv', 'application/csv', 'application/octet-stream', ''],
       zip: ['application/zip', 'application/x-zip-compressed', 'application/octet-stream']
     };
     const permitted = allowed[file.fieldname] || [];
-    cb(null, permitted.includes(file.mimetype));
+    const extOk = file.fieldname === 'excel'
+      && excelExts.includes(path.extname(file.originalname || '').toLowerCase());
+    cb(null, permitted.includes(file.mimetype) || extOk);
   }
 });
 
