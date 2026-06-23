@@ -14,7 +14,7 @@ import {
   campaignStats, failedRecipients, deleteCampaign, requeueFailed, firstRecipient
 } from './src/campaigns.js';
 import { startWorker, stopWorker } from './src/worker.js';
-import { preparePayslips, prepareForReview, confirmPayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { preparePayslips, prepareForReview, confirmPayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, cleanupStaleRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
 import { getAnthropicApiKey } from './src/settings.js';
 import XLSX from 'xlsx';
 import { Worker } from 'node:worker_threads';
@@ -311,8 +311,16 @@ function loadRunResults(run_id) {
 // the event loop. Returns the pipeline outcome or throws if the worker fails.
 function runPayslipJob(excelBuffer, zipBuffer, apiKey) {
   return new Promise((resolve, reject) => {
+    // Transfer (not copy) any buffer that owns its whole ArrayBuffer — halves peak RAM for
+    // big ZIPs. A pooled/sliced Buffer is left to be cloned (transferring it would corrupt
+    // unrelated pool memory). Transferred buffers are detached here; we don't use them after.
+    const transferList = [];
+    for (const b of [excelBuffer, zipBuffer]) {
+      if (b.byteOffset === 0 && b.byteLength === b.buffer.byteLength) transferList.push(b.buffer);
+    }
     const worker = new Worker(new URL('./src/payslipJobWorker.js', import.meta.url), {
-      workerData: { excel: excelBuffer, zip: zipBuffer, apiKey }
+      workerData: { excel: excelBuffer, zip: zipBuffer, apiKey },
+      transferList
     });
 
     const timeout = setTimeout(() => {
@@ -463,6 +471,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
     if (/\.(html|js|css)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
   }
 }));
+
+cleanupStaleRuns();
+setInterval(cleanupStaleRuns, 30 * 60 * 1000).unref(); // sweep abandoned/timed-out runs every 30 min
 
 const server = app.listen(PORT, () => {
   console.log(`Payroll Mail Service listening on http://localhost:${PORT}`);

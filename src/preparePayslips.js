@@ -66,7 +66,10 @@ const ZIP_UNREADABLE = 'Could not read the ZIP file — it may be corrupted, tru
 // of returning nothing. Async — callers must await.
 export function extractZip(buffer, destFolder) {
   fs.mkdirSync(destFolder, { recursive: true });
-  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer); // yauzl needs a real Buffer
+  // yauzl needs a real Buffer. When handed a Uint8Array (worker boundary), wrap it as a
+  // VIEW over the same memory rather than copying — avoids an extra full-size allocation.
+  const buf = Buffer.isBuffer(buffer) ? buffer
+    : Buffer.from(buffer.buffer, buffer.byteOffset, buffer.byteLength);
   return new Promise((resolve, reject) => {
     yauzl.fromBuffer(buf, { lazyEntries: true }, (err, zipfile) => {
       if (err || !zipfile) return reject(new Error(ZIP_UNREADABLE));
@@ -109,6 +112,9 @@ export function extractZip(buffer, destFolder) {
           stream.on('data', (c) => {
             size += c.length;
             if (size > MAX_FILE_BYTES) { stream.destroy(); return fail(new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`)); }
+            // Guard the TOTAL cap on real bytes — a crafted ZIP can declare uncompressedSize=0
+            // to slip past the pre-stream check, so enforce it live as data arrives.
+            if (totalBytes + size > MAX_UNZIPPED_BYTES) { stream.destroy(); return fail(new Error('ZIP too large: total uncompressed size exceeds 200 MB.')); }
             chunks.push(c);
           });
           stream.on('error', () => fail(new Error(ZIP_UNREADABLE)));
@@ -412,13 +418,17 @@ export async function confirmPayslips(runId, selections) {
   const protectedDir = path.join(runDir, 'protected');
   const results = [];
   const protect_errors = [];
+  const usedFiles = new Set(); // prevent the same PDF being protected for two people
 
   for (const m of toProtect) {
     if (!m.filename) { protect_errors.push({ email: m.email, error: 'No file assigned.' }); continue; }
     if (!m.ni_no) { protect_errors.push({ email: m.email, error: 'Missing NI number — cannot protect.' }); continue; }
     const srcName = path.basename(m.filename); // never trust a client-supplied path
+    const usedKey = srcName.toLowerCase();
+    if (usedFiles.has(usedKey)) { protect_errors.push({ email: m.email, error: `File "${srcName}" is already assigned to another recipient.` }); continue; }
     const srcPath = path.join(rawDir, srcName);
     if (!fs.existsSync(srcPath)) { protect_errors.push({ email: m.email, error: `File not found: ${srcName}` }); continue; }
+    usedFiles.add(usedKey);
     const outName = path.basename(srcName, '.pdf') + '_protected.pdf';
     const outPath = path.join(protectedDir, outName);
     try {
@@ -444,6 +454,28 @@ export async function confirmPayslips(runId, selections) {
 }
 
 // ---- Run management ----
+
+// Remove orphaned/abandoned runs to bound PII-on-disk: a run is stale if it was never
+// confirmed (no results.json) and its directory hasn't been touched within the TTL.
+// Covers worker timeouts (raw PDFs + NI-bearing pending.json left behind) and reviews
+// the operator started but never approved.
+const STALE_RUN_TTL_MS = 60 * 60 * 1000; // 1 hour
+export function cleanupStaleRuns(ttlMs = STALE_RUN_TTL_MS) {
+  if (!fs.existsSync(PAYSLIPS_DIR)) return 0;
+  const now = Date.now();
+  let removed = 0;
+  for (const d of fs.readdirSync(PAYSLIPS_DIR, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    const runPath = path.join(PAYSLIPS_DIR, d.name);
+    if (fs.existsSync(path.join(runPath, 'results.json'))) continue; // confirmed — keep
+    try {
+      const age = now - fs.statSync(runPath).mtimeMs;
+      if (age > ttlMs) { fs.rmSync(runPath, { recursive: true, force: true }); removed++; }
+    } catch { /* ignore */ }
+  }
+  return removed;
+}
+
 
 export function listRuns() {
   if (!fs.existsSync(PAYSLIPS_DIR)) return [];

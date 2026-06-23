@@ -371,6 +371,20 @@ $('#approveBtn').addEventListener('click', async () => {
     if (data.protect_errors?.length) msg += ` ${data.protect_errors.length} failed — see below.`;
     st.className = 'status ok'; st.textContent = msg;
 
+    // Surface per-recipient protection failures (missing NI, duplicate/missing file, qpdf error).
+    const errBox = $('#approveErrors');
+    if (errBox) {
+      errBox.textContent = '';
+      if (data.protect_errors?.length) {
+        const lbl = el('div', 'section-label', `Failed to protect (${data.protect_errors.length})`);
+        lbl.style.color = '#b91c1c';
+        errBox.appendChild(lbl);
+        const ul = el('ul', 'warn-list');
+        for (const e of data.protect_errors) ul.appendChild(el('li', null, `${e.email}: ${e.error}`));
+        errBox.appendChild(ul);
+      }
+    }
+
     btn.textContent = 'Protected ✓';
     $('#preflightBtn').disabled = false;
     $('#sendSetupBtn').disabled = false;
