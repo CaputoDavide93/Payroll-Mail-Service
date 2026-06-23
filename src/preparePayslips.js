@@ -348,9 +348,16 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
       pending.push({ email: m.email, name: m.name, ni_no: rec.ni_no, filename: m.filename, path: m.path, confidence: m.confidence });
     }
 
+    // Carry NI numbers onto unmatched recipients so the admin can manually assign a
+    // file to them in the review UI (and we can still protect it on confirm).
+    const unmatchedFull = unmatched.map((u) => {
+      const rec = recipientMap.get(u.email.toLowerCase());
+      return { email: u.email, name: u.name, ni_no: rec?.ni_no || '' };
+    });
+
     // Persist pending state (includes NI nos — server-side only, deleted after confirm)
     const pendingFile = path.join(PAYSLIPS_DIR, runId, 'pending.json');
-    fs.writeFileSync(pendingFile, JSON.stringify({ name: runName, pending, unmatched, unmatched_files, ai_errors, no_ni }));
+    fs.writeFileSync(pendingFile, JSON.stringify({ name: runName, pending, unmatched: unmatchedFull, unmatched_files, ai_errors, no_ni }));
 
     return {
       run_id: runId,
@@ -358,7 +365,7 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
       // NI nos returned here for admin spot-check UI (protected by APP_PASSWORD + IP restriction)
       pending: pending.map((p) => ({ email: p.email, name: p.name, ni_no: p.ni_no, filename: p.filename, confidence: p.confidence })),
       no_ni,
-      unmatched,
+      unmatched: unmatchedFull,
       unmatched_files,
       ai_errors
     };
@@ -369,30 +376,53 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
 }
 
 /**
- * Phase 2: run qpdf on approved subset → save results.json.
- * approvedEmails: optional array — null means approve all pending.
+ * Phase 2: run qpdf on the approved/corrected subset → save results.json.
+ * selections: optional array of { email, filename } — the final review decisions,
+ * including any manual file corrections/assignments. If null, all pending matches
+ * are protected with their auto-matched files (approve-all).
  */
-export async function confirmPayslips(runId, approvedEmails) {
+export async function confirmPayslips(runId, selections) {
   const runDir = path.join(PAYSLIPS_DIR, runId);
   const pendingFile = path.join(runDir, 'pending.json');
   if (!fs.existsSync(pendingFile)) throw new Error('No pending review found for this run. Please re-upload your files.');
 
   const { name: pendingName, pending, unmatched, unmatched_files, ai_errors } = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+  const rawDir = path.join(runDir, 'raw');
 
-  const approvedSet = approvedEmails ? new Set(approvedEmails.map((e) => e.toLowerCase())) : null;
-  const toProtect = approvedSet ? pending.filter((p) => approvedSet.has(p.email.toLowerCase())) : pending;
+  // Build a lookup of every known recipient (matched + unmatched) → NI + name + default file.
+  const info = new Map();
+  for (const p of pending) info.set(p.email.toLowerCase(), { name: p.name, ni_no: p.ni_no, filename: p.filename, confidence: p.confidence });
+  for (const u of (unmatched || [])) {
+    const k = u.email.toLowerCase();
+    if (!info.has(k)) info.set(k, { name: u.name, ni_no: u.ni_no || '', filename: null, confidence: 'manual' });
+  }
+
+  // Resolve the final protect list from the review selections (with corrections) or default to all pending.
+  let toProtect;
+  if (Array.isArray(selections)) {
+    toProtect = selections.map((sel) => {
+      const rec = info.get(String(sel.email).toLowerCase()) || {};
+      return { email: sel.email, name: rec.name || sel.name || sel.email, ni_no: rec.ni_no || '', filename: sel.filename || rec.filename, confidence: rec.confidence || 'manual' };
+    });
+  } else {
+    toProtect = pending.map((p) => ({ email: p.email, name: p.name, ni_no: p.ni_no, filename: p.filename, confidence: p.confidence }));
+  }
   if (!toProtect.length) throw new Error('No payslips selected for protection.');
 
   const protectedDir = path.join(runDir, 'protected');
-  const rawDir = path.join(runDir, 'raw');
   const results = [];
   const protect_errors = [];
 
   for (const m of toProtect) {
-    const outName = path.basename(m.filename, '.pdf') + '_protected.pdf';
+    if (!m.filename) { protect_errors.push({ email: m.email, error: 'No file assigned.' }); continue; }
+    if (!m.ni_no) { protect_errors.push({ email: m.email, error: 'Missing NI number — cannot protect.' }); continue; }
+    const srcName = path.basename(m.filename); // never trust a client-supplied path
+    const srcPath = path.join(rawDir, srcName);
+    if (!fs.existsSync(srcPath)) { protect_errors.push({ email: m.email, error: `File not found: ${srcName}` }); continue; }
+    const outName = path.basename(srcName, '.pdf') + '_protected.pdf';
     const outPath = path.join(protectedDir, outName);
     try {
-      await protectPdf(m.path, outPath, m.ni_no);
+      await protectPdf(srcPath, outPath, m.ni_no);
       results.push({ email: m.email, name: m.name, filename: outName, protected_path: outPath, confidence: m.confidence });
     } catch (err) {
       protect_errors.push({ email: m.email, error: err.message });

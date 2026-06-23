@@ -365,8 +365,13 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
 app.post('/api/payslips/:runId/confirm', wrap(async (req, res) => {
   const { runId } = req.params;
   assertRunId(runId);
-  const { approved_emails } = req.body;
-  const outcome = await confirmPayslips(runId, approved_emails || null);
+  const { selections, approved_emails } = req.body;
+  // Prefer explicit selections (include manual file corrections). Fall back to the old
+  // approved_emails shape (no corrections) for any stale client.
+  const finalSelections = Array.isArray(selections) ? selections
+    : Array.isArray(approved_emails) ? approved_emails.map((email) => ({ email }))
+    : null;
+  const outcome = await confirmPayslips(runId, finalSelections);
   res.json({
     run_id: outcome.run_id,
     protected_count: outcome.results.length,
@@ -450,7 +455,14 @@ app.delete('/api/payslips/runs/:runId', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  // Force the browser to revalidate HTML/JS/CSS each load so deploys take effect
+  // immediately (returns 304 when unchanged, fresh bytes when changed).
+  setHeaders(res, filePath) {
+    if (/\.(html|js|css)$/.test(filePath)) res.setHeader('Cache-Control', 'no-cache');
+  }
+}));
 
 const server = app.listen(PORT, () => {
   console.log(`Payroll Mail Service listening on http://localhost:${PORT}`);

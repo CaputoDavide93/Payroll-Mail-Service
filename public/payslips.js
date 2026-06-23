@@ -210,94 +210,143 @@ function updateApproveBtn() {
   btn.textContent = `Approve & Protect ${n} payslip${n === 1 ? '' : 's'} →`;
 }
 
+// All filenames available in this run (matched + leftover) — used to populate the
+// per-row correction dropdowns so a wrong/blank match can be fixed before protecting.
+let allFiles = [];
+// email -> chosen filename for the final protect step (seeded from auto-matches).
+let assignments = new Map();
+
+function buildFileSelect(email, current) {
+  const sel = el('select', 'file-select');
+  const none = el('option', null, '— choose file —');
+  none.value = '';
+  sel.appendChild(none);
+  for (const f of allFiles) {
+    const o = el('option', null, f);
+    o.value = f;
+    sel.appendChild(o);
+  }
+  sel.value = current || '';
+  sel.addEventListener('change', () => {
+    const row = sel.closest('tr');
+    if (sel.value) {
+      assignments.set(email, sel.value);
+      approvedEmails.add(email);
+      if (row) row.classList.remove('row-bad');
+    } else {
+      assignments.delete(email);
+      approvedEmails.delete(email);
+      if (row) row.classList.add('row-bad');
+    }
+    updateApproveBtn();
+  });
+  return sel;
+}
+
+function reviewRow({ name, email, ni_no, filename, confidence }, { rowClass }) {
+  const tr = el('tr', rowClass || null);
+  tr.dataset.email = email;
+  tr.appendChild(el('td', null, name));
+  const niTd = el('td');
+  niTd.style.cssText = 'font-family:monospace;font-size:.85rem;letter-spacing:.04em';
+  niTd.textContent = ni_no || '— missing —';
+  if (!ni_no) niTd.style.color = '#b91c1c';
+  tr.appendChild(niTd);
+  tr.appendChild(el('td', null, email));
+  const fileTd = el('td');
+  fileTd.appendChild(buildFileSelect(email, filename));
+  tr.appendChild(fileTd);
+  const confCls = confidence === 'high' ? 'badge-high' : confidence === 'medium' ? 'badge-medium' : 'badge-low';
+  tr.appendChild(el('td', confCls, confidence || 'unmatched'));
+  const tdAct = el('td');
+  const delBtn = el('button', 'btn small danger');
+  delBtn.textContent = 'Remove';
+  delBtn.addEventListener('click', () => {
+    tr.style.opacity = '0.35';
+    tr.style.textDecoration = 'line-through';
+    delBtn.disabled = true;
+    approvedEmails.delete(email);
+    assignments.delete(email);
+    updateApproveBtn();
+  });
+  tdAct.appendChild(delBtn);
+  tr.appendChild(tdAct);
+  return tr;
+}
+
 function renderReviewTable(data) {
-  const { pending, unmatched, unmatched_files, no_ni, ai_errors } = data;
+  const { pending = [], unmatched = [], unmatched_files = [], no_ni = [], ai_errors = [] } = data;
   const container = $('#matchResults');
   container.textContent = '';
-  approvedEmails = new Set((pending || []).map((p) => p.email));
 
-  if (pending && pending.length > 0) {
-    const lbl = el('div', 'section-label', `${pending.length} matched — spot-check names, NI numbers and files before approving`);
-    container.appendChild(lbl);
+  // Build the full file list + seed approvals/assignments from the auto-matches.
+  allFiles = Array.from(new Set([...pending.map((p) => p.filename), ...unmatched_files])).sort();
+  approvedEmails = new Set(pending.map((p) => p.email));
+  assignments = new Map(pending.map((p) => [p.email, p.filename]));
 
+  // Recipients that still need a file (no auto-match) but have an NI — fixable here.
+  const assignable = unmatched.filter((u) => u.ni_no);
+
+  const intro = el('p', 'muted', 'Check each match. Amber = low-confidence, red = needs a file. Use the dropdown to correct any wrong or missing file before approving.');
+  intro.style.cssText = 'font-size:.85rem;margin:.25rem 0 .75rem';
+  container.appendChild(intro);
+
+  if (pending.length || assignable.length) {
     const table = el('table', 'match-table');
     const thead = el('thead');
     const hr = el('tr');
-    ['Full Name', 'NI No', 'Email', 'PDF File', 'Confidence', ''].forEach((t) => hr.appendChild(el('th', null, t)));
+    ['Full Name', 'NI No', 'Email', 'PDF File', 'Match', ''].forEach((t) => hr.appendChild(el('th', null, t)));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = el('tbody');
 
     for (const m of pending) {
-      const tr = el('tr');
-      tr.dataset.email = m.email;
-      tr.appendChild(el('td', null, m.name));
-      const niTd = el('td');
-      niTd.style.cssText = 'font-family:monospace;font-size:.85rem;letter-spacing:.04em';
-      niTd.textContent = m.ni_no;
-      tr.appendChild(niTd);
-      tr.appendChild(el('td', null, m.email));
-      tr.appendChild(el('td', null, m.filename));
-      const confCls = m.confidence === 'high' ? 'badge-high' : m.confidence === 'medium' ? 'badge-medium' : 'badge-low';
-      tr.appendChild(el('td', confCls, m.confidence));
-      const tdAct = el('td');
-      const delBtn = el('button', 'btn small danger');
-      delBtn.textContent = 'Remove';
-      delBtn.addEventListener('click', () => {
-        tr.style.opacity = '0.35';
-        tr.style.textDecoration = 'line-through';
-        delBtn.disabled = true;
-        approvedEmails.delete(m.email);
-        updateApproveBtn();
-      });
-      tdAct.appendChild(delBtn);
-      tr.appendChild(tdAct);
-      tbody.appendChild(tr);
+      const rowClass = m.confidence === 'low' ? 'row-bad' : m.confidence === 'medium' ? 'row-warn' : null;
+      tbody.appendChild(reviewRow(m, { rowClass }));
+    }
+    // Unmatched-but-assignable recipients: red until a file is chosen.
+    for (const u of assignable) {
+      tbody.appendChild(reviewRow({ name: u.name, email: u.email, ni_no: u.ni_no, filename: '', confidence: 'low' }, { rowClass: 'row-bad' }));
     }
     table.appendChild(tbody);
     container.appendChild(table);
   }
 
-  if (no_ni && no_ni.length > 0) {
+  if (no_ni.length) {
     const lbl = el('div', 'section-label', `Missing NI No (${no_ni.length}) — cannot protect, will be skipped`);
-    lbl.style.color = '#b45309';
+    lbl.style.color = '#b91c1c';
     container.appendChild(lbl);
     const ul = el('ul', 'warn-list');
     for (const u of no_ni) ul.appendChild(el('li', null, `${u.name} <${u.email}>`));
     container.appendChild(ul);
   }
 
-  if (unmatched && unmatched.length > 0) {
-    const lbl = el('div', 'section-label', `Unmatched recipients (${unmatched.length}) — no PDF found`);
-    lbl.style.color = '#b45309';
-    container.appendChild(lbl);
+  if (unmatched_files.length) {
+    const det = el('details');
+    det.style.cssText = 'margin-top:1rem';
+    const sum = el('summary', null, `Unassigned files (${unmatched_files.length}) — available in the dropdowns above`);
+    sum.style.cssText = 'cursor:pointer;color:#666;font-size:.85rem';
+    det.appendChild(sum);
     const ul = el('ul', 'warn-list');
-    for (const u of unmatched) ul.appendChild(el('li', null, `${u.name} <${u.email}>`));
-    container.appendChild(ul);
-  }
-
-  if (unmatched_files && unmatched_files.length > 0) {
-    const lbl = el('div', 'section-label', `Unmatched files (${unmatched_files.length}) — not assigned`);
-    lbl.style.color = '#999';
-    container.appendChild(lbl);
-    const ul = el('ul', 'warn-list');
-    ul.style.color = '#999';
+    ul.style.cssText = 'color:#999;max-height:220px;overflow:auto';
     for (const f of unmatched_files) ul.appendChild(el('li', null, f));
-    container.appendChild(ul);
+    det.appendChild(ul);
+    container.appendChild(det);
   }
 
-  if (ai_errors && ai_errors.length > 0) {
-    const lbl = el('div', 'section-label', 'AI matching notes');
-    lbl.style.color = '#999';
-    container.appendChild(lbl);
+  if (ai_errors.length) {
+    const det = el('details');
+    det.style.cssText = 'margin-top:.75rem';
+    det.appendChild(el('summary', null, 'AI matching notes'));
     const ul = el('ul', 'warn-list');
     ul.style.color = '#999';
     for (const e of ai_errors) ul.appendChild(el('li', null, e));
-    container.appendChild(ul);
+    det.appendChild(ul);
+    container.appendChild(det);
   }
 
-  if (!pending || pending.length === 0) {
-    container.appendChild(el('p', 'status err', 'No payslips could be matched. Check filenames against employee names and try again.'));
+  if (!pending.length && !assignable.length) {
+    container.appendChild(el('p', 'status err', 'No payslips could be matched. Use the dropdowns to assign files manually, or check filenames against employee names.'));
   }
 
   updateApproveBtn();
@@ -315,7 +364,7 @@ $('#approveBtn').addEventListener('click', async () => {
     const data = await api(`/api/payslips/${currentRunId}/confirm`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ approved_emails: [...approvedEmails] })
+      body: JSON.stringify({ selections: [...approvedEmails].map((email) => ({ email, filename: assignments.get(email) })).filter((x) => x.filename) })
     });
 
     let msg = `✓ ${data.protected_count} PDF${data.protected_count === 1 ? '' : 's'} protected.`;
