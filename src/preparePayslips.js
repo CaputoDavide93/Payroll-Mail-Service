@@ -66,8 +66,9 @@ const ZIP_UNREADABLE = 'Could not read the ZIP file — it may be corrupted, tru
 // of returning nothing. Async — callers must await.
 export function extractZip(buffer, destFolder) {
   fs.mkdirSync(destFolder, { recursive: true });
+  const buf = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer); // yauzl needs a real Buffer
   return new Promise((resolve, reject) => {
-    yauzl.fromBuffer(buffer, { lazyEntries: true }, (err, zipfile) => {
+    yauzl.fromBuffer(buf, { lazyEntries: true }, (err, zipfile) => {
       if (err || !zipfile) return reject(new Error(ZIP_UNREADABLE));
 
       const extracted = [];

@@ -49,6 +49,15 @@ describe('extractZip limits', () => {
     fs.rmSync(dir, { recursive: true, force: true });
   });
 
+  it('accepts a Uint8Array buffer (worker-thread structured clone)', async () => {
+    const buf = makeZip([{ name: 'ok.pdf', data: Buffer.from('%PDF-1.4') }]);
+    const u8 = new Uint8Array(buf); // simulate loss of Buffer methods across worker boundary
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'payslip-'));
+    const files = await extractZip(u8, dir);
+    assert.deepEqual(files, ['ok.pdf']);
+    fs.rmSync(dir, { recursive: true, force: true });
+  });
+
   it('strips directory components (no traversal)', async () => {
     const buf = makeZip([{ name: '../../etc/evil.pdf', data: Buffer.from('%PDF-1.4') }]);
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'payslip-'));

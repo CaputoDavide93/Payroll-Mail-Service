@@ -35,8 +35,11 @@ function fuzzyMatch(name, filenames, usedFiles) {
 }
 
 const AI_TIMEOUT_MS = 30_000;
+const AI_BATCH_SIZE = 25;     // recipients per AI call — keeps JSON output well under max_tokens
+const AI_CONCURRENCY = 5;     // parallel AI calls in flight
 
-async function aiMatch(recipients, filenames, apiKey) {
+// Match one batch of recipients against the full file list (single Claude call).
+async function aiMatchBatch(recipients, filenames, apiKey) {
   const prompt = `You are matching payroll attachment files to employee recipients.
 
 Recipients (JSON):
@@ -87,6 +90,30 @@ Only include recipients you matched. Skip unmatched ones.`;
   }
 }
 
+// Batch recipients into parallel AI calls so large runs (150+) actually get AI coverage
+// instead of overflowing a single call's token budget. All files are passed to every
+// batch (a recipient's file can be any of them). Returns merged results + per-batch errors.
+async function aiMatch(recipients, filenames, apiKey) {
+  const batches = [];
+  for (let i = 0; i < recipients.length; i += AI_BATCH_SIZE) {
+    batches.push(recipients.slice(i, i + AI_BATCH_SIZE));
+  }
+
+  const results = [];
+  const errors = [];
+  for (let i = 0; i < batches.length; i += AI_CONCURRENCY) {
+    const slice = batches.slice(i, i + AI_CONCURRENCY);
+    const settled = await Promise.allSettled(
+      slice.map((b) => aiMatchBatch(b, filenames, apiKey))
+    );
+    for (const r of settled) {
+      if (r.status === 'fulfilled') results.push(...r.value);
+      else errors.push(r.reason?.message || String(r.reason));
+    }
+  }
+  return { results, errors };
+}
+
 export async function matchAttachments(recipients, folderPath, apiKey) {
   if (!recipients || recipients.length === 0) throw new Error('Recipients list is empty.');
   const files = listAttachmentFiles(folderPath);
@@ -96,11 +123,9 @@ export async function matchAttachments(recipients, folderPath, apiKey) {
   const aiErrors = [];
 
   if (apiKey) {
-    try {
-      aiResults = await aiMatch(recipients, files, apiKey);
-    } catch (err) {
-      aiErrors.push(err.message);
-    }
+    const { results, errors } = await aiMatch(recipients, files, apiKey);
+    aiResults = results;
+    aiErrors.push(...errors);
   }
 
   // Keyed by email; also validate that filenames returned by AI actually exist
