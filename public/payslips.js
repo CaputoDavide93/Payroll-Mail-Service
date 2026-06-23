@@ -90,9 +90,12 @@ $('#testBtn').addEventListener('click', async () => {
 
 // ---- Step navigation ----
 function showStep(n) {
-  $('#step1').style.display = n === 1 ? '' : 'none';
-  $('#step2').style.display = n === 2 ? '' : 'none';
-  $('#step3').style.display = n === 3 ? '' : 'none';
+  // Must use an explicit 'block' (not '') for the active step: the stylesheet has
+  // `#step2, #step3 { display: none }`, so clearing the inline style would fall back
+  // to that rule and the step would stay hidden.
+  $('#step1').style.display = n === 1 ? 'block' : 'none';
+  $('#step2').style.display = n === 2 ? 'block' : 'none';
+  $('#step3').style.display = n === 3 ? 'block' : 'none';
 }
 
 $('#backBtn').addEventListener('click', () => {
