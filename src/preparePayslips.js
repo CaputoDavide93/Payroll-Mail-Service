@@ -309,6 +309,12 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
  * Phase 1: parse Excel + extract ZIP → AI-match → save pending.json with NI nos.
  * Returns matches for admin review WITHOUT running qpdf.
  */
+// Human-friendly run label shown in the runs list, e.g. "Upload 23 Jun 2026, 21:40".
+function friendlyRunName() {
+  const when = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return `Upload ${when}`;
+}
+
 export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
   await assertQpdf();
 
@@ -317,6 +323,7 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
   const protectedDir = path.join(PAYSLIPS_DIR, runId, 'protected');
   fs.mkdirSync(rawDir, { recursive: true });
   fs.mkdirSync(protectedDir, { recursive: true });
+  const runName = friendlyRunName();
 
   try {
     const recipients = parseExcel(xlsxBuffer);
@@ -343,10 +350,11 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
 
     // Persist pending state (includes NI nos — server-side only, deleted after confirm)
     const pendingFile = path.join(PAYSLIPS_DIR, runId, 'pending.json');
-    fs.writeFileSync(pendingFile, JSON.stringify({ pending, unmatched, unmatched_files, ai_errors, no_ni }));
+    fs.writeFileSync(pendingFile, JSON.stringify({ name: runName, pending, unmatched, unmatched_files, ai_errors, no_ni }));
 
     return {
       run_id: runId,
+      name: runName,
       // NI nos returned here for admin spot-check UI (protected by APP_PASSWORD + IP restriction)
       pending: pending.map((p) => ({ email: p.email, name: p.name, ni_no: p.ni_no, filename: p.filename, confidence: p.confidence })),
       no_ni,
@@ -369,7 +377,7 @@ export async function confirmPayslips(runId, approvedEmails) {
   const pendingFile = path.join(runDir, 'pending.json');
   if (!fs.existsSync(pendingFile)) throw new Error('No pending review found for this run. Please re-upload your files.');
 
-  const { pending, unmatched, unmatched_files, ai_errors } = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+  const { name: pendingName, pending, unmatched, unmatched_files, ai_errors } = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
 
   const approvedSet = approvedEmails ? new Set(approvedEmails.map((e) => e.toLowerCase())) : null;
   const toProtect = approvedSet ? pending.filter((p) => approvedSet.has(p.email.toLowerCase())) : pending;
@@ -399,7 +407,7 @@ export async function confirmPayslips(runId, approvedEmails) {
     throw new Error('All PDF protections failed. Check qpdf is installed correctly.');
   }
 
-  const runName = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const runName = pendingName || friendlyRunName();
   const outcome = { results, unmatched, unmatched_files, protect_errors, ai_errors: ai_errors || [], run_id: runId, name: runName };
   fs.writeFileSync(path.join(runDir, 'results.json'), JSON.stringify(outcome));
   return outcome;
@@ -414,17 +422,30 @@ export function listRuns() {
     .map((d) => {
       const runPath = path.join(PAYSLIPS_DIR, d.name);
       const resultFile = path.join(runPath, 'results.json');
+      const pendingFile = path.join(runPath, 'pending.json');
       let created = null;
       let recipient_count = 0;
       let name = null;
+      let status = 'prepared';
       try {
         const stat = fs.statSync(resultFile);
         created = stat.mtime.toISOString();
         const data = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
         recipient_count = data.results?.length || 0;
         name = data.name || null;
-      } catch { /* ignore */ }
-      return { run_id: d.name, created, recipient_count, name };
+        status = 'protected';
+      } catch {
+        // Not confirmed yet — fall back to the pending review so the run still
+        // shows its friendly name and matched count instead of a raw id / 0.
+        try {
+          const stat = fs.statSync(pendingFile);
+          created = stat.mtime.toISOString();
+          const data = JSON.parse(fs.readFileSync(pendingFile, 'utf8'));
+          recipient_count = data.pending?.length || 0;
+          name = data.name || null;
+        } catch { /* ignore */ }
+      }
+      return { run_id: d.name, created, recipient_count, name, status };
     })
     .sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 }

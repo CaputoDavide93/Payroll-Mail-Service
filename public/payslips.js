@@ -124,8 +124,9 @@ $('#prepareBtn').addEventListener('click', async () => {
   if (!excelFile) { st.className = 'status err'; st.textContent = 'Please select the Excel file.'; return; }
   if (!zipFile) { st.className = 'status err'; st.textContent = 'Please select the ZIP file.'; return; }
 
-  st.className = 'status'; st.textContent = 'Uploading and processing… this may take a moment.';
+  st.className = 'status'; st.textContent = '';
   $('#prepareBtn').disabled = true;
+  startPrepareProgress();
 
   try {
     const fd = new FormData();
@@ -144,17 +145,60 @@ $('#prepareBtn').addEventListener('click', async () => {
     $('#approveStatus').textContent = '';
     $('#preflightBtn').disabled = true;
     $('#sendSetupBtn').disabled = true;
+    stopPrepareProgress(true);
     renderReviewTable(data);
     st.textContent = '';
     showStep(2);
     loadRuns();
   } catch (err) {
+    stopPrepareProgress(false);
     st.className = 'status err'; st.textContent = err.message;
   } finally {
     preparing = false;
     $('#prepareBtn').disabled = false;
   }
 });
+
+// --- Prepare progress bar ---------------------------------------------------
+// The /prepare POST blocks until the worker finishes (extract + AI matching),
+// so we show a smooth time-based crawl with stage labels rather than a fake
+// precise percentage. It eases toward 90% and snaps to 100% on completion.
+let progTimer = null;
+function startPrepareProgress() {
+  const box = $('#prepareProgress'), bar = $('#progBar'), stage = $('#progStage'), time = $('#progTime');
+  box.hidden = false;
+  const started = Date.now();
+  let pct = 0;
+  bar.style.width = '0%';
+  const stages = [
+    [0, 'Uploading files…'],
+    [3, 'Extracting PDFs from ZIP…'],
+    [7, 'Matching payslips with AI…'],
+    [45, 'Still matching — large batches take longer…'],
+  ];
+  if (progTimer) clearInterval(progTimer);
+  progTimer = setInterval(() => {
+    const el = (Date.now() - started) / 1000;
+    time.textContent = Math.floor(el) + 's';
+    pct = Math.min(90, pct + (90 - pct) * 0.05);
+    bar.style.width = pct.toFixed(1) + '%';
+    let lbl = stages[0][1];
+    for (const [t, l] of stages) if (el >= t) lbl = l;
+    stage.textContent = lbl;
+  }, 400);
+}
+function stopPrepareProgress(ok) {
+  if (progTimer) { clearInterval(progTimer); progTimer = null; }
+  const box = $('#prepareProgress'), bar = $('#progBar'), stage = $('#progStage');
+  if (ok) {
+    bar.style.width = '100%';
+    stage.textContent = 'Done';
+    setTimeout(() => { box.hidden = true; bar.style.width = '0%'; }, 700);
+  } else {
+    box.hidden = true;
+    bar.style.width = '0%';
+  }
+}
 
 // Tracks which employee emails are still approved (deleted rows remove from this set)
 let approvedEmails = new Set();
