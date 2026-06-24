@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import yauzl from 'yauzl';
@@ -141,18 +142,20 @@ export function extractZip(buffer, destFolder) {
 }
 
 export async function protectPdf(inputPath, outputPath, password) {
+  // Pass arguments via a chmod-600 @argfile (qpdf reads one argument per line) so the
+  // NI-number password never appears in process arguments (visible via ps / /proc/PID/cmdline).
+  const argfile = path.join(os.tmpdir(), `qpdf-${randomBytes(12).toString('hex')}.args`);
+  const args = ['--encrypt', password, password, '256', '--', inputPath, outputPath].join('\n') + '\n';
+  fs.writeFileSync(argfile, args, { mode: 0o600 });
   try {
-    await execFileAsync('qpdf', [
-      '--encrypt', password, password, '256',
-      '--',
-      inputPath,
-      outputPath
-    ]);
+    await execFileAsync('qpdf', [`@${argfile}`]);
   } catch {
-    // Don't propagate qpdf's raw error — argv contains the password.
+    // Don't propagate qpdf's raw error — it may echo the argfile/inputs.
     // Remove any partial output file qpdf may have created before throwing.
     try { fs.unlinkSync(outputPath); } catch (e) { console.warn('[protectPdf] failed to remove partial output:', outputPath, e.message); }
     throw new Error('PDF protection failed (qpdf error).');
+  } finally {
+    try { fs.unlinkSync(argfile); } catch { /* ignore */ }
   }
 }
 

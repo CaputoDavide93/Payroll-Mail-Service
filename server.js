@@ -27,7 +27,7 @@ const APP_PASSWORD = process.env.APP_PASSWORD || '';
 seedFromEnv();
 
 const app = express();
-app.use(express.json());
+app.use(express.json({ limit: '5mb' })); // large confirm selections (1000+ recipients)
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -475,10 +475,18 @@ app.use(express.static(path.join(__dirname, 'public'), {
 cleanupStaleRuns();
 setInterval(cleanupStaleRuns, 30 * 60 * 1000).unref(); // sweep abandoned/timed-out runs every 30 min
 
+// Fail fast rather than silently exposing payroll PII: refuse to start without a password
+// unless the operator explicitly opts out (ALLOW_NO_AUTH=1) for local development.
+if (!APP_PASSWORD && process.env.ALLOW_NO_AUTH !== '1') {
+  console.error('FATAL: APP_PASSWORD is not set. The API would be unauthenticated and expose payroll data.');
+  console.error('Set APP_PASSWORD, or set ALLOW_NO_AUTH=1 to run without auth (local/dev only).');
+  process.exit(1);
+}
+
 const server = app.listen(PORT, () => {
   console.log(`Payroll Mail Service listening on http://localhost:${PORT}`);
   if (APP_PASSWORD) console.log('Password protection is ENABLED.')
-  else console.warn('WARNING: APP_PASSWORD is not set — the API is unprotected. Set APP_PASSWORD in production.')
+  else console.warn('WARNING: APP_PASSWORD is not set — running UNAUTHENTICATED (ALLOW_NO_AUTH=1).')
   startWorker();
 });
 
