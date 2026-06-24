@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Payslips — Payroll Mail Service</title>
-  <link rel="stylesheet" href="styles.css?v=20260624a" />
+  <link rel="stylesheet" href="styles.css?v=20260624b" />
   <style>
     .prog { margin-top: 1rem; max-width: 520px; }
     .prog-track { height: 8px; background: var(--border,#e6e6e6); border-radius: 999px; overflow: hidden; }
@@ -68,7 +68,8 @@
       <a href="/" class="btn ghost">📨 Campaigns</a>
       <a href="/payslips.html" class="btn ghost">📋 Payslips</a>
       <a href="/logs.html" class="btn ghost">📜 Logs</a>
-      <button id="settingsBtn" class="btn ghost">⚙️ Settings</button>
+      <a href="/howto.html" class="btn ghost">❓ How-to</a>
+      <a href="/settings.html" class="btn ghost">⚙️ Settings</a>
     </div>
   </header>
 
@@ -171,26 +172,7 @@ Kind regards</textarea>
       </form>
     </div>
 
-  <!-- Settings dialog (reuse same pattern as main app) -->
-  <dialog id="settingsDialog" class="card dialog">
-    <h2 style="margin:0 0 1rem">Settings</h2>
-    <form id="settingsForm">
-      <div class="form-row"><label class="label">SMTP host</label><input name="smtp_host" class="input" placeholder="smtp.gmail.com" /></div>
-      <div class="form-row"><label class="label">SMTP port</label><input name="smtp_port" class="input" type="number" placeholder="465" /></div>
-      <div class="form-row"><label class="label">Gmail / Workspace address</label><input name="smtp_user" class="input" type="email" /></div>
-      <div class="form-row"><label class="label">App password <span id="passHint" class="muted" style="font-weight:normal"></span></label><input name="smtp_pass" class="input" type="password" autocomplete="new-password" placeholder="Leave blank to keep existing" /></div>
-      <div class="form-row"><label class="label">From name</label><input name="from_name" class="input" /></div>
-      <div class="form-row"><label class="label">From address</label><input name="from_email" class="input" type="email" /></div>
-      <div class="form-row"><label class="label">Daily send limit</label><input name="daily_limit" class="input" type="number" /></div>
-      <div class="form-row"><label class="label">Anthropic API key <span id="aiHint" class="muted" style="font-weight:normal"></span></label><input name="anthropic_api_key" class="input" type="password" autocomplete="new-password" placeholder="sk-ant-… (enables AI matching & pre-flight; leave blank to keep existing)" /></div>
-      <div class="form-row"><label class="label">Test email</label><div style="display:flex;gap:.5rem"><input id="testTo" class="input" type="email" placeholder="your@email.com" /><button type="button" id="testBtn" class="btn small">Send test</button></div></div>
-      <p id="settingsStatus" class="status"></p>
-      <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem">
-        <button type="button" id="settingsClose" class="btn">Close</button>
-        <button type="submit" class="btn primary">Save</button>
-      </div>
-    </form>
-  </dialog>
+  <!-- Settings (identical layout to index.html — shared .settings-* CSS) -->
 
   <dialog id="loginDialog" class="card dialog" style="width:min(360px,96vw)">
     <h2 style="margin:0 0 1rem">Sign in</h2>
@@ -214,6 +196,6 @@ Kind regards</textarea>
     </div>
   </main>
 
-  <script src="payslips.js?v=20260624a"></script>
+  <script src="payslips.js?v=20260624b"></script>
 </body>
 </html>

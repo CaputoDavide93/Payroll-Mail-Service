@@ -112,6 +112,26 @@ dialog .card { box-shadow: none; border: none; }
 .failures details summary { cursor: pointer; }
 .failures ul { margin: .4rem 0 0; padding-left: 1.1rem; }
 
+/* Settings dialog — shared between index.html and payslips.html */
+.settings-card { width: min(560px, 92vw); max-height: 88vh; overflow-y: auto; }
+.settings-section { border: 0; margin: 0 0 1.25rem; padding: 0; }
+.settings-section:last-of-type { margin-bottom: 0; }
+.settings-section > legend {
+  padding: 0; margin: 0 0 .65rem; font-size: .72rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: .06em; color: var(--muted);
+}
+.settings-section .field { margin-bottom: .85rem; }
+.settings-section .field:last-child { margin-bottom: 0; }
+.field > label { display: block; font-weight: 600; font-size: .85rem; margin-bottom: .25rem; }
+.field input, .field select { margin-top: 0; }
+.test-row { display: flex; gap: .5rem; flex-wrap: wrap; align-items: center; }
+.test-row input { flex: 1 1 200px; min-width: 0; }
+.test-row .btn { flex: 0 0 auto; }
+.settings-footer {
+  display: flex; justify-content: flex-end; gap: .5rem; flex-wrap: wrap;
+  margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--line);
+}
+
 /* How-to dialog */
 .howto-card { width: min(680px, 96vw); max-height: 85vh; overflow-y: auto; }
 .howto-steps { display: grid; gap: 1.25rem; }

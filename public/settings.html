@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Settings — Payroll Mail Service</title>
+  <link rel="stylesheet" href="styles.css?v=20260624b" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">✉️</span>
+      <div>
+        <h1>Payroll Mail Service</h1>
+        <p class="tagline">Settings — mail server, sender identity, AI key.</p>
+      </div>
+    </div>
+    <div class="row">
+      <a href="/" class="btn ghost">📨 Campaigns</a>
+      <a href="/payslips.html" class="btn ghost">📋 Payslips</a>
+      <a href="/logs.html" class="btn ghost">📜 Logs</a>
+      <a href="/howto.html" class="btn ghost">❓ How-to</a>
+      <a href="/settings.html" class="btn ghost">⚙️ Settings</a>
+    </div>
+  </header>
+
+  <main class="container" style="max-width:620px">
+    <form id="settingsForm" class="card settings-card">
+      <h2 style="margin:0 0 .25rem">Settings</h2>
+      <p class="muted">One-time setup. Uses a Gmail / Workspace <b>App Password</b> — see the README for the 2-minute steps.</p>
+
+      <fieldset class="settings-section">
+        <legend>Mail server</legend>
+        <div class="field">
+          <label for="set-smtp-host">SMTP host</label>
+          <input id="set-smtp-host" name="smtp_host" value="smtp.gmail.com" autocomplete="off" />
+        </div>
+        <div class="grid2">
+          <div class="field">
+            <label for="set-smtp-port">Port</label>
+            <select id="set-smtp-port" name="smtp_port">
+              <option value="465">465 (SSL)</option>
+              <option value="587">587 (STARTTLS)</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="settings-section">
+        <legend>Authentication</legend>
+        <div class="field">
+          <label for="set-smtp-user">Gmail / Workspace address (login)</label>
+          <input id="set-smtp-user" name="smtp_user" type="email" placeholder="you@yourcompany.com" autocomplete="username" />
+        </div>
+        <div class="field">
+          <label for="set-smtp-pass">App password</label>
+          <input id="set-smtp-pass" name="smtp_pass" type="password" placeholder="16-character app password" autocomplete="new-password" />
+          <span class="hint" id="passHint"></span>
+        </div>
+      </fieldset>
+
+      <fieldset class="settings-section">
+        <legend>Sender identity</legend>
+        <div class="grid2">
+          <div class="field">
+            <label for="set-from-name">From name (shown to recipients)</label>
+            <input id="set-from-name" name="from_name" placeholder="Payroll Team" />
+          </div>
+          <div class="field">
+            <label for="set-from-email">From address</label>
+            <input id="set-from-email" name="from_email" type="email" placeholder="payroll@yourcompany.com" />
+          </div>
+        </div>
+      </fieldset>
+
+      <fieldset class="settings-section">
+        <legend>Sending limits &amp; AI</legend>
+        <div class="grid2">
+          <div class="field">
+            <label for="set-daily-limit">Daily send limit</label>
+            <input id="set-daily-limit" name="daily_limit" type="number" min="1" value="1800" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="set-anthropic-key">Anthropic API key</label>
+          <input id="set-anthropic-key" name="anthropic_api_key" type="password" autocomplete="new-password" placeholder="sk-ant-… (enables AI matching &amp; pre-flight on the Payslips page)" />
+          <span class="hint" id="aiHint"></span>
+        </div>
+      </fieldset>
+
+      <fieldset class="settings-section">
+        <legend>Test</legend>
+        <div class="field">
+          <label for="testTo">Test email</label>
+          <div class="test-row">
+            <input id="testTo" name="test_to" type="email" placeholder="Send test email to…" autocomplete="off" />
+            <button type="button" class="btn" id="testBtn">Send test</button>
+          </div>
+        </div>
+      </fieldset>
+
+      <p class="status" id="settingsStatus"></p>
+      <div class="settings-footer">
+        <button type="submit" class="btn primary">Save settings</button>
+      </div>
+    </form>
+  </main>
+
+  <dialog id="loginDialog" class="card dialog" style="width:min(360px,96vw)">
+    <h2 style="margin-top:0">🔒 Enter password</h2>
+    <form id="loginForm">
+      <input id="loginPassword" class="input" type="password" placeholder="App password" autocomplete="current-password" />
+      <p id="loginError" class="status err"></p>
+      <div style="display:flex;justify-content:flex-end;margin-top:1rem">
+        <button type="submit" class="btn primary">Unlock</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script src="settings.js?v=20260624b"></script>
+</body>
+</html>

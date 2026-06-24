@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>How-to — Payroll Mail Service</title>
+  <link rel="stylesheet" href="styles.css?v=20260624b" />
+  <style>
+    .howto-intro { background: #eef4ff; border: 1px solid #c7dafc; border-radius: 10px; padding: 1rem 1.25rem; margin-bottom: 1.5rem; }
+    .howto-tip { background: #f0faf0; border-left: 4px solid #3fb950; padding: .6rem .9rem; border-radius: 6px; margin: .6rem 0; font-size: .9rem; }
+    .howto-warn { background: #fff8f0; border-left: 4px solid #e8a83c; padding: .6rem .9rem; border-radius: 6px; margin: .6rem 0; font-size: .9rem; }
+    .howto-section-title { font-size: 1.15rem; margin: 2rem 0 .5rem; padding-bottom: .35rem; border-bottom: 2px solid var(--border,#e0e0e0); }
+    kbd { background:#f0f2f5; border:1px solid #d0d7de; border-bottom-width:2px; border-radius:5px; padding:.05rem .35rem; font-size:.85em; }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">✉️</span>
+      <div>
+        <h1>Payroll Mail Service</h1>
+        <p class="tagline">How-to — a simple, step-by-step guide.</p>
+      </div>
+    </div>
+    <div class="row">
+      <a href="/" class="btn ghost">📨 Campaigns</a>
+      <a href="/payslips.html" class="btn ghost">📋 Payslips</a>
+      <a href="/logs.html" class="btn ghost">📜 Logs</a>
+      <a href="/howto.html" class="btn ghost">❓ How-to</a>
+      <a href="/settings.html" class="btn ghost">⚙️ Settings</a>
+    </div>
+  </header>
+
+  <main class="container" style="max-width:820px">
+    <h1 style="font-size:1.5rem;margin-bottom:1rem">❓ How to use Payroll Mail Service</h1>
+
+    <div class="howto-intro">
+      <b>Two things this app does:</b>
+      <ol style="margin:.5rem 0 0;padding-left:1.2rem">
+        <li><b>📨 Campaigns</b> — send the same email (with one optional attachment) to a list of people.</li>
+        <li><b>📋 Payslips</b> — send each employee their <b>own</b> PDF, locked with their NI number as the password.</li>
+      </ol>
+      <p style="margin:.6rem 0 0">Do <b>Step 1 (Settings)</b> once. Then use Campaigns or Payslips whenever you need.</p>
+    </div>
+
+    <!-- ============ SETTINGS ============ -->
+    <h2 class="howto-section-title">① First-time setup — do this once</h2>
+    <div class="howto-steps">
+      <div class="howto-step">
+        <div class="howto-num">1</div>
+        <div>
+          <div class="howto-title">Open ⚙️ Settings (top-right) and connect your email</div>
+          <p class="howto-body">You need a Gmail/Workspace <b>App Password</b> — <u>not</u> your normal login password.</p>
+          <ol class="howto-list">
+            <li>Go to <b>myaccount.google.com</b> → <b>Security</b> → turn on <b>2-Step Verification</b> (required).</li>
+            <li>Search <b>"App passwords"</b> → create one called <b>"Payroll Mail"</b>.</li>
+            <li>Copy the <b>16-character</b> code → paste it into the <b>App password</b> box in Settings.</li>
+            <li>Fill in your <b>Gmail address</b>, <b>From name</b>, and <b>From address</b>.</li>
+            <li>Click <b>Save settings</b>, then type your own email in <b>Test email</b> and click <b>Send test</b>.</li>
+          </ol>
+          <div class="howto-tip">✅ If the test email arrives, you're ready. If not, re-check the App Password (no spaces).</div>
+        </div>
+      </div>
+      <div class="howto-step">
+        <div class="howto-num">2</div>
+        <div>
+          <div class="howto-title">(Optional) Add your Anthropic API key — for smarter payslip matching</div>
+          <p class="howto-body">In <b>⚙️ Settings → Anthropic API key</b>, paste a key that starts with <code>sk-ant-</code>. This turns on AI matching and the pre-flight safety check on the Payslips page.</p>
+          <div class="howto-tip">Without a key, payslips still work — the app matches names to files automatically (just without the AI double-check).</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ CAMPAIGNS ============ -->
+    <h2 class="howto-section-title">📨 Sending a normal campaign</h2>
+    <div class="howto-steps">
+      <div class="howto-step">
+        <div class="howto-num">1</div>
+        <div>
+          <div class="howto-title">Prepare a recipients CSV</div>
+          <p class="howto-body">Make a spreadsheet and export it as <b>.csv</b>. It needs an <code>email</code> column. A <code>name</code> column is recommended for the greeting.</p>
+          <div class="howto-example">email, name, department<br/>sarah@company.com, Sarah, Finance<br/>john@company.com, John, Engineering</div>
+        </div>
+      </div>
+      <div class="howto-step">
+        <div class="howto-num">2</div>
+        <div>
+          <div class="howto-title">Fill in the “New send” form on the Campaigns page</div>
+          <ul class="howto-list">
+            <li><b>Subject / Body</b> — type <code>{name}</code> (or any CSV column) to personalise, e.g. “Hi {name},”.</li>
+            <li><b>Recipients CSV</b> — upload the file from step 1.</li>
+            <li><b>Attachment</b> — optional; the <u>same</u> file goes to everyone.</li>
+            <li><b>Batch size / pause</b> — leave the defaults (10 every 60s) if unsure.</li>
+          </ul>
+          <p class="howto-body">Click <b>Create &amp; send</b>. You can close the tab — sending continues on the server.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ PAYSLIPS ============ -->
+    <h2 class="howto-section-title">📋 Sending payslips (each person gets their own)</h2>
+    <div class="howto-steps">
+      <div class="howto-step">
+        <div class="howto-num">1</div>
+        <div>
+          <div class="howto-title">Get your two files ready</div>
+          <ul class="howto-list">
+            <li>An <b>Excel</b> file (.xlsx/.xls/.csv) with columns: <code>EENo</code>, <code>FullName</code>, <code>NI No</code>, <code>Email Address</code>.</li>
+            <li>A <b>ZIP</b> file containing all the payslip <b>PDFs</b>. Name each PDF with the person's name (e.g. <code>Sarah Jones 25-26.pdf</code>) so it can be matched.</li>
+          </ul>
+          <div class="howto-warn">The <b>NI No</b> becomes each PDF's password. Double-check it's correct in your Excel.</div>
+        </div>
+      </div>
+      <div class="howto-step">
+        <div class="howto-num">2</div>
+        <div>
+          <div class="howto-title">Upload &amp; Prepare</div>
+          <p class="howto-body">On the <b>📋 Payslips</b> page, upload the Excel and the ZIP, then click <b>Prepare payslips</b>. A progress bar shows it extracting and matching. (Watch live detail on the <b>📜 Logs</b> page.)</p>
+        </div>
+      </div>
+      <div class="howto-step">
+        <div class="howto-num">3</div>
+        <div>
+          <div class="howto-title">Review &amp; fix the matches — nothing is sent yet</div>
+          <p class="howto-body">A table appears showing each employee and the PDF matched to them, with a confidence badge:</p>
+          <ul class="howto-list">
+            <li><b>Green/High</b> — the full name is in the file name. Good.</li>
+            <li><b style="color:#b45309">Amber</b> — a weaker match. Glance at it.</li>
+            <li><b style="color:#b91c1c">Red</b> — no file, or needs attention. Fix it.</li>
+          </ul>
+          <p class="howto-body">Use the <b>dropdown</b> in each row to pick the correct PDF, or <b>Remove</b> anyone you don't want to send to.</p>
+          <div class="howto-warn">Check this table carefully — it's your last chance before the PDFs are locked. The same file can't be sent to two people.</div>
+        </div>
+      </div>
+      <div class="howto-step">
+        <div class="howto-num">4</div>
+        <div>
+          <div class="howto-title">Approve &amp; Protect</div>
+          <p class="howto-body">When the table looks right, click <b>Approve &amp; Protect</b>. Only now are the PDFs locked with each NI number. Any failures are listed underneath.</p>
+        </div>
+      </div>
+      <div class="howto-step">
+        <div class="howto-num">5</div>
+        <div>
+          <div class="howto-title">(Optional) Pre-flight check, then send</div>
+          <p class="howto-body">If you added an Anthropic key, click <b>Run AI pre-flight check</b> for a second opinion on the matches. Then click <b>Set up email</b>, write the message, and <b>Send</b> — each person receives only their own payslip.</p>
+        </div>
+      </div>
+      <div class="howto-step">
+        <div class="howto-num">6</div>
+        <div>
+          <div class="howto-title">Clean up when done</div>
+          <p class="howto-body">In <b>Server data</b> at the bottom of the Payslips page, click <b>Delete</b> on the run (or <b>Delete all data</b>) to remove PDFs and personal data from the server.</p>
+          <div class="howto-tip">Unapproved uploads are deleted automatically after 1 hour.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ============ LOGS ============ -->
+    <h2 class="howto-section-title">📜 Watching what's happening</h2>
+    <p class="howto-body" style="margin-top:.25rem">The <b>📜 Logs</b> page shows live activity — uploads, matching, protection, sends, and any errors — colour-coded. Use it if something seems stuck or to confirm a send is going out.</p>
+
+    <!-- ============ TROUBLE ============ -->
+    <h2 class="howto-section-title">🛟 If something goes wrong</h2>
+    <ul class="howto-list">
+      <li><b>Test email won't send</b> — re-check the App Password in Settings (16 chars, no spaces).</li>
+      <li><b>Pre-flight says “API key rejected (401)”</b> — re-paste your Anthropic key in Settings (no extra spaces), or generate a new one.</li>
+      <li><b>The review table didn't appear</b> — refresh the page with <kbd>Cmd/Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>.</li>
+      <li><b>“No valid PDF files in the ZIP”</b> — make sure the ZIP contains PDFs named with the employees' names.</li>
+    </ul>
+    <p class="muted" style="margin-top:1.5rem;font-size:.85rem">Need more detail? See the project README.</p>
+  </main>
+
+  <script>
+    // Keep the in-tab password (if set on another page) so links here don't re-prompt.
+    // This page is static help — no API calls — so it works with or without auth.
+  </script>
+</body>
+</html>

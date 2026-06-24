@@ -34,62 +34,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
   }
 });
 
-// ---- Settings ----
-$('#settingsBtn').addEventListener('click', () => openSettings().catch((err) => { alert('Could not open settings: ' + err.message); }));
-$('#settingsClose').addEventListener('click', () => $('#settingsDialog').close());
-
-async function openSettings() {
-  const s = await api('/api/settings');
-  const f = $('#settingsForm');
-  f.smtp_host.value = s.smtp_host;
-  f.smtp_port.value = String(s.smtp_port);
-  f.smtp_user.value = s.smtp_user;
-  f.from_name.value = s.from_name;
-  f.from_email.value = s.from_email;
-  f.daily_limit.value = s.daily_limit;
-  f.smtp_pass.value = '';
-  $('#passHint').textContent = s.smtp_pass_set ? 'A password is already saved — leave blank to keep it.' : '';
-  $('#aiHint').textContent = s.anthropic_api_key_set ? 'A key is already saved — leave blank to keep it.' : 'Not set — AI matching & pre-flight are disabled.';
-  f.anthropic_api_key.value = '';
-  $('#settingsStatus').textContent = '';
-  $('#settingsDialog').showModal();
-}
-
-$('#settingsForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const f = $('#settingsForm');
-  const st = $('#settingsStatus');
-  try {
-    await api('/api/settings', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        smtp_host: f.smtp_host.value, smtp_port: f.smtp_port.value,
-        smtp_secure: f.smtp_port.value === '465',
-        smtp_user: f.smtp_user.value, smtp_pass: f.smtp_pass.value,
-        from_name: f.from_name.value, from_email: f.from_email.value,
-        daily_limit: f.daily_limit.value,
-        anthropic_api_key: f.anthropic_api_key.value
-      })
-    });
-    st.className = 'status ok'; st.textContent = 'Saved.';
-  } catch (err) {
-    st.className = 'status err'; st.textContent = err.message;
-  }
-});
-
-$('#testBtn').addEventListener('click', async () => {
-  const to = $('#testTo').value.trim();
-  const st = $('#settingsStatus');
-  if (!to) { st.className = 'status err'; st.textContent = 'Enter a test address.'; return; }
-  st.className = 'status'; st.textContent = 'Sending…';
-  try {
-    await api('/api/settings/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
-    st.className = 'status ok'; st.textContent = `Sent to ${to}.`;
-  } catch (err) {
-    st.className = 'status err'; st.textContent = 'Test failed: ' + err.message;
-  }
-});
+// (Settings is now its own page: /settings.html)
 
 // ---- Step navigation ----
 function showStep(n) {

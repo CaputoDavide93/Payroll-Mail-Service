@@ -35,69 +35,7 @@ $('#loginForm').addEventListener('submit', async (e) => {
   }
 });
 
-// ---- How to dialog ----
-$('#howtoBtn').addEventListener('click', () => $('#howtoDialog').showModal());
-$('#howtoClose').addEventListener('click', () => $('#howtoDialog').close());
-
-// ---- Settings dialog ----
-const settingsDialog = $('#settingsDialog');
-$('#settingsBtn').addEventListener('click', () => openSettings());
-$('#settingsClose').addEventListener('click', () => settingsDialog.close());
-
-async function openSettings() {
-  const s = await api('/api/settings');
-  const f = $('#settingsForm');
-  f.smtp_host.value = s.smtp_host;
-  f.smtp_port.value = String(s.smtp_port);
-  f.smtp_user.value = s.smtp_user;
-  f.from_name.value = s.from_name;
-  f.from_email.value = s.from_email;
-  f.daily_limit.value = s.daily_limit;
-  f.smtp_pass.value = '';
-  $('#passHint').textContent = s.smtp_pass_set ? 'A password is already saved — leave blank to keep it.' : '';
-  $('#settingsStatus').textContent = '';
-  settingsDialog.showModal();
-}
-
-async function saveSettings() {
-  const f = $('#settingsForm');
-  const body = {
-    smtp_host: f.smtp_host.value,
-    smtp_port: f.smtp_port.value,
-    smtp_secure: f.smtp_port.value === '465',
-    smtp_user: f.smtp_user.value,
-    smtp_pass: f.smtp_pass.value,
-    from_name: f.from_name.value,
-    from_email: f.from_email.value,
-    daily_limit: f.daily_limit.value
-  };
-  return api('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-}
-
-$('#settingsForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  const st = $('#settingsStatus');
-  try {
-    await saveSettings();
-    st.className = 'status ok'; st.textContent = 'Saved.';
-  } catch (err) {
-    st.className = 'status err'; st.textContent = err.message;
-  }
-});
-
-$('#testBtn').addEventListener('click', async () => {
-  const to = $('#testTo').value.trim();
-  const st = $('#settingsStatus');
-  if (!to) { st.className = 'status err'; st.textContent = 'Enter an address to send the test to.'; return; }
-  st.className = 'status'; st.textContent = 'Saving & sending test…';
-  try {
-    await saveSettings(); // make sure the test uses exactly what's on screen
-    await api('/api/settings/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ to }) });
-    st.className = 'status ok'; st.textContent = `Test sent to ${to} — check the inbox.`;
-  } catch (err) {
-    st.className = 'status err'; st.textContent = 'Test failed: ' + err.message;
-  }
-});
+// (Settings & How-to are now their own pages: /settings.html, /howto.html)
 
 // ---- Attachment type toggle ----
 async function loadPayslipRuns() {
@@ -311,7 +249,7 @@ $('#refreshBtn').addEventListener('click', loadCampaigns);
 async function boot() {
   loadCampaigns();
   const s = await api('/api/settings').catch(() => null);
-  if (s && !s.configured) openSettings(); // nudge first-time setup
+  if (s && !s.configured) location.href = '/settings.html'; // first-run: go configure
 }
 
 async function init() {
