@@ -18,3 +18,18 @@ describe('parseRecipients', () => {
     assert.match(result.errors[0], /No email column/);
   });
 });
+
+import { fuzzyMatch } from '../src/matchAttachments.js';
+
+describe('fuzzyMatch confidence grading', () => {
+  const files = ['Thomas Alan Smith 25-26.pdf', 'Tom Hext 25-26.pdf', 'Smith J 25-26.pdf'];
+  it('rates a full intact name as high', () => {
+    assert.equal(fuzzyMatch('Thomas Alan Smith', files, new Set())?.confidence, 'high');
+  });
+  it('rates an ambiguous surname-only match as low', () => {
+    assert.equal(fuzzyMatch('Smith', files, new Set())?.confidence, 'low');
+  });
+  it('returns null when no file contains the name', () => {
+    assert.equal(fuzzyMatch('Nobody Here', files, new Set()), null);
+  });
+});

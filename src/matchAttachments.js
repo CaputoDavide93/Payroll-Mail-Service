@@ -21,17 +21,33 @@ function sanitize(s) {
   return String(s).replace(/[\x00-\x1f\x7f]/g, ' ').slice(0, 200);
 }
 
-function fuzzyMatch(name, filenames, usedFiles) {
-  const parts = normStr(name).split(/\s+/).filter(Boolean);
+// Match a recipient name to a filename and grade the confidence:
+//  - high:   the full name (2+ parts) appears intact in the filename, e.g.
+//            "Thomas Alan Smith" -> "Thomas Alan Smith 25-26.pdf"
+//  - medium: a single file contains all name parts but not as one run, or a
+//            single-part (mononym) match
+//  - low:    several files contain all the name parts (ambiguous)
+// Returns { filename, confidence } or null.
+export function fuzzyMatch(name, filenames, usedFiles) {
+  const norm = normStr(name);
+  const parts = norm.split(/\s+/).filter(Boolean);
   if (parts.length === 0) return null;
   const candidates = filenames.filter((f) => {
     if (usedFiles.has(f)) return false;
     const nf = normStr(f);
     return parts.every((p) => nf.includes(p));
   });
-  if (candidates.length === 1) return candidates[0];
-  if (candidates.length > 1) return candidates.sort((a, b) => a.length - b.length)[0];
-  return null;
+  if (candidates.length === 0) return null;
+  // Prefer the shortest filename — fewest extra tokens beyond the name.
+  candidates.sort((a, b) => a.length - b.length);
+  const best = candidates[0];
+  const fullNameIntact = normStr(best).includes(norm); // all parts, in order, contiguous
+
+  let confidence;
+  if (fullNameIntact && parts.length >= 2) confidence = 'high';
+  else if (candidates.length === 1) confidence = 'medium';
+  else confidence = 'low';
+  return { filename: best, confidence };
 }
 
 const AI_TIMEOUT_MS = 30_000;
@@ -153,8 +169,8 @@ export async function matchAttachments(recipients, folderPath, apiKey) {
 
     // 2. Fuzzy fallback — skips already-used files internally
     if (!filename) {
-      filename = fuzzyMatch(recipient.name, files, usedFiles);
-      if (filename) confidence = 'medium';
+      const fz = fuzzyMatch(recipient.name, files, usedFiles);
+      if (fz) { filename = fz.filename; confidence = fz.confidence; }
     }
 
     if (filename) {
