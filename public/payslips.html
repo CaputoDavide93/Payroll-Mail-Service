@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Payslips — Payroll Mail Service</title>
-  <link rel="stylesheet" href="styles.css?v=20260623d" />
+  <link rel="stylesheet" href="styles.css?v=20260624a" />
   <style>
     .prog { margin-top: 1rem; max-width: 520px; }
     .prog-track { height: 8px; background: var(--border,#e6e6e6); border-radius: 999px; overflow: hidden; }
@@ -180,6 +180,7 @@ Kind regards</textarea>
       <div class="form-row"><label class="label">From name</label><input name="from_name" class="input" /></div>
       <div class="form-row"><label class="label">From address</label><input name="from_email" class="input" type="email" /></div>
       <div class="form-row"><label class="label">Daily send limit</label><input name="daily_limit" class="input" type="number" /></div>
+      <div class="form-row"><label class="label">Anthropic API key <span id="aiHint" class="muted" style="font-weight:normal"></span></label><input name="anthropic_api_key" class="input" type="password" autocomplete="new-password" placeholder="sk-ant-… (enables AI matching & pre-flight; leave blank to keep existing)" /></div>
       <div class="form-row"><label class="label">Test email</label><div style="display:flex;gap:.5rem"><input id="testTo" class="input" type="email" placeholder="your@email.com" /><button type="button" id="testBtn" class="btn small">Send test</button></div></div>
       <p id="settingsStatus" class="status"></p>
       <div style="display:flex;justify-content:flex-end;gap:.5rem;margin-top:1rem">
@@ -211,6 +212,6 @@ Kind regards</textarea>
     </div>
   </main>
 
-  <script src="payslips.js?v=20260623d"></script>
+  <script src="payslips.js?v=20260624a"></script>
 </body>
 </html>

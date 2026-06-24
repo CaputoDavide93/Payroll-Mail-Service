@@ -317,7 +317,7 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
  */
 // Human-friendly run label shown in the runs list, e.g. "Upload 23 Jun 2026, 21:40".
 function friendlyRunName() {
-  const when = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const when = new Date().toLocaleString('en-GB', { timeZone: 'Europe/London', day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   return `Upload ${when}`;
 }
 

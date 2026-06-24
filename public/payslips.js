@@ -49,6 +49,8 @@ async function openSettings() {
   f.daily_limit.value = s.daily_limit;
   f.smtp_pass.value = '';
   $('#passHint').textContent = s.smtp_pass_set ? 'A password is already saved — leave blank to keep it.' : '';
+  $('#aiHint').textContent = s.anthropic_api_key_set ? 'A key is already saved — leave blank to keep it.' : 'Not set — AI matching & pre-flight are disabled.';
+  f.anthropic_api_key.value = '';
   $('#settingsStatus').textContent = '';
   $('#settingsDialog').showModal();
 }
@@ -66,7 +68,8 @@ $('#settingsForm').addEventListener('submit', async (e) => {
         smtp_secure: f.smtp_port.value === '465',
         smtp_user: f.smtp_user.value, smtp_pass: f.smtp_pass.value,
         from_name: f.from_name.value, from_email: f.from_email.value,
-        daily_limit: f.daily_limit.value
+        daily_limit: f.daily_limit.value,
+        anthropic_api_key: f.anthropic_api_key.value
       })
     });
     st.className = 'status ok'; st.textContent = 'Saved.';
@@ -510,7 +513,11 @@ async function loadRuns() {
     for (const r of runs) {
       const li = el('li');
       const fmt = r.created ? new Date(r.created).toLocaleString() : 'unknown date';
-      const info = el('span', null, `${r.name || r.run_id} — ${r.recipient_count} payslip${r.recipient_count === 1 ? '' : 's'}`);
+      const n = r.recipient_count;
+      const detail = r.status === 'protected'
+        ? `${n} protected payslip${n === 1 ? '' : 's'}`
+        : `${n} matched — awaiting approval (not yet protected)`;
+      const info = el('span', null, `${r.name || r.run_id} — ${detail}`);
       const delBtn = el('button', 'btn small danger');
       delBtn.textContent = 'Delete';
       delBtn.addEventListener('click', async () => {
