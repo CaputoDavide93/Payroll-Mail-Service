@@ -55,17 +55,14 @@ function showStep(n) {
   // to that rule and the step would stay hidden.
   $('#step1').style.display = n === 1 ? 'block' : 'none';
   $('#step2').style.display = n === 2 ? 'block' : 'none';
-  $('#step3').style.display = n === 3 ? 'block' : 'none';
 }
 
 $('#backBtn').addEventListener('click', () => {
   currentRunId = null;
-  $('#sendSetupBtn').disabled = true;
+  $('#protectedHandoff').style.display = 'none';
   $('#preflightBtn').disabled = true;
   showStep(1);
 });
-$('#backBtn2').addEventListener('click', () => showStep(2));
-$('#sendSetupBtn').addEventListener('click', () => showStep(3));
 
 // ---- DOM helpers ----
 function el(tag, cls, text) {
@@ -107,7 +104,7 @@ $('#prepareBtn').addEventListener('click', async () => {
     $('#preflightStatus').textContent = '';
     $('#approveStatus').textContent = '';
     $('#preflightBtn').disabled = true;
-    $('#sendSetupBtn').disabled = true;
+    $('#protectedHandoff').style.display = 'none';
     stopPrepareProgress(true);
     renderReviewTable(data);
     st.textContent = '';
@@ -350,7 +347,7 @@ $('#approveBtn').addEventListener('click', async () => {
 
     btn.textContent = 'Protected ✓';
     $('#preflightBtn').disabled = false;
-    $('#sendSetupBtn').disabled = false;
+    $('#protectedHandoff').style.display = 'block';
     loadRuns();
   } catch (err) {
     st.className = 'status err'; st.textContent = 'Protection failed: ' + err.message;
@@ -411,45 +408,6 @@ $('#preflightBtn').addEventListener('click', async () => {
     st.className = 'status err'; st.textContent = 'Pre-flight failed: ' + err.message;
   } finally {
     $('#preflightBtn').disabled = false;
-  }
-});
-
-// ---- Step 3: Send ----
-$('#sendForm').addEventListener('submit', async (e) => {
-  e.preventDefault();
-  if (!currentRunId) return;
-  const st = $('#sendStatus');
-  const btn = $('#sendBtn');
-  btn.disabled = true;
-  st.className = 'status'; st.textContent = 'Creating campaign…';
-
-  try {
-    const data = await api('/api/payslips/send', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        run_id: currentRunId,
-        name: $('#campaignName').value,
-        subject: $('#emailSubject').value,
-        body: $('#emailBody').value,
-        batch_size: $('#batchSize').value,
-        batch_interval_seconds: $('#batchInterval').value,
-        as_draft: $('#asDraft').checked
-      })
-    });
-    st.className = 'status ok';
-    st.textContent = `Campaign created — ${data.accepted} payslip${data.accepted === 1 ? '' : 's'} queued. `;
-    const link = document.createElement('a');
-    link.href = '/';
-    link.textContent = 'View campaigns →';
-    st.appendChild(link);
-    currentRunId = null;
-    btn.disabled = true;  // keep disabled — run is consumed, prevent double-submit
-    btn.textContent = 'Sent ✓';
-    loadRuns();
-  } catch (err) {
-    st.className = 'status err'; st.textContent = err.message;
-    btn.disabled = false;
   }
 });
 

@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Payslips — Payroll Mail Service</title>
-  <link rel="stylesheet" href="styles.css?v=20260624d" />
+  <link rel="stylesheet" href="styles.css?v=20260624e" />
   <style>
     .prog { margin-top: 1rem; max-width: 520px; }
     .prog-track { height: 8px; background: var(--border,#e6e6e6); border-radius: 999px; overflow: hidden; }
@@ -123,53 +123,13 @@
         <div id="preflightResult"></div>
       </div>
 
+      <div id="protectedHandoff" style="margin-top:1.25rem;display:none">
+        <p class="status ok" style="margin:0 0 .6rem">✓ Payslips protected. To send them, open the <b>Campaigns</b> page, choose <b>“Payslips run”</b>, pick this run, write your email and send.</p>
+        <a href="/" class="btn primary">📨 Go to Campaigns to send →</a>
+      </div>
       <div style="margin-top:1.25rem">
         <button id="backBtn" class="btn">← Back</button>
-        <button id="sendSetupBtn" class="btn primary" style="margin-left:.5rem" disabled>Set up email →</button>
       </div>
-    </div>
-
-    <!-- Step 3: Email setup + send -->
-    <div class="step-card" id="step3">
-      <h2><span class="step-num">3</span> Set up and send</h2>
-      <form id="sendForm">
-        <div class="form-row">
-          <label class="label" for="campaignName">Campaign name</label>
-          <input type="text" id="campaignName" class="input" value="Payslips 2025–26" required />
-        </div>
-        <div class="form-row">
-          <label class="label" for="emailSubject">Subject</label>
-          <input type="text" id="emailSubject" class="input" value="Your payslip for 2025–26 is attached" required />
-        </div>
-        <div class="form-row">
-          <label class="label" for="emailBody">Body</label>
-          <textarea id="emailBody" class="input" rows="5" required>Dear {name},
-
-Please find your payslip for 2025–26 attached. The document is password-protected — your password is your NI number.
-
-If you have any questions, please contact HR.
-
-Kind regards</textarea>
-        </div>
-        <div style="display:flex;gap:1rem;flex-wrap:wrap">
-          <div style="flex:1;min-width:160px">
-            <label class="label" for="batchSize">Batch size</label>
-            <input type="number" id="batchSize" class="input" value="10" min="1" max="100" />
-          </div>
-          <div style="flex:1;min-width:160px">
-            <label class="label" for="batchInterval">Batch interval (seconds)</label>
-            <input type="number" id="batchInterval" class="input" value="60" min="0" />
-          </div>
-        </div>
-        <div style="margin-top:1.25rem;display:flex;align-items:center;gap:.75rem;flex-wrap:wrap">
-          <button type="button" id="backBtn2" class="btn">← Back</button>
-          <button type="submit" id="sendBtn" class="btn primary">Send payslips</button>
-          <label style="display:flex;align-items:center;gap:.4rem;font-size:.875rem;cursor:pointer">
-            <input type="checkbox" id="asDraft" /> Save as draft (don't send yet)
-          </label>
-          <span id="sendStatus" class="status"></span>
-        </div>
-      </form>
     </div>
 
   <!-- Settings (identical layout to index.html — shared .settings-* CSS) -->
@@ -196,6 +156,6 @@ Kind regards</textarea>
     </div>
   </main>
 
-  <script src="payslips.js?v=20260624d"></script>
+  <script src="payslips.js?v=20260624e"></script>
 </body>
 </html>
