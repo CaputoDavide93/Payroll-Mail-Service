@@ -59,6 +59,21 @@ function passwordMatches(supplied) {
 const failedAttempts = new Map(); // ip -> { count, until, last }
 const FAILED_TTL_MS = 10 * 60 * 1000;
 
+// Authenticated client tracking. The app uses one shared password (no named users),
+// so we track usage by client IP and surface it on the Logs page.
+const sessions = new Map(); // ip -> { lastSeen }
+const SESSION_IDLE_MS = 30 * 60 * 1000; // a gap longer than this starts a new "session"
+const cleanIp = (ip) => String(ip || 'unknown').replace(/^::ffff:/, '');
+function noteSession(ip, req) {
+  const now = Date.now();
+  const prev = sessions.get(ip);
+  sessions.set(ip, { lastSeen: now });
+  if (!prev || now - prev.lastSeen > SESSION_IDLE_MS) {
+    const ua = (req.get('user-agent') || '').slice(0, 90);
+    logInfo('auth', `New session — ${cleanIp(ip)}${ua ? ' · ' + ua : ''}`);
+  }
+}
+
 // Sweep entries whose lockout window has expired so the map doesn't grow forever.
 function sweepFailedAttempts() {
   const now = Date.now();
@@ -66,6 +81,10 @@ function sweepFailedAttempts() {
     if ((rec.until > 0 && rec.until <= now) || (rec.last && rec.last + FAILED_TTL_MS <= now)) {
       failedAttempts.delete(ip);
     }
+  }
+  // Drop idle sessions so the map stays bounded.
+  for (const [ip, rec] of sessions) {
+    if (now - rec.lastSeen > 2 * SESSION_IDLE_MS) sessions.delete(ip);
   }
 }
 setInterval(sweepFailedAttempts, 5 * 60 * 1000).unref();
@@ -82,6 +101,7 @@ app.use('/api', (req, res, next) => {
     // Clear the lockout window but keep the count so the IP doesn't reset its budget
     const existing = failedAttempts.get(ip);
     if (existing) failedAttempts.set(ip, { count: existing.count, until: 0, last: Date.now() });
+    noteSession(ip, req);
     return next();
   }
   // Only count as a failed attempt when a password was explicitly supplied but wrong.
@@ -89,7 +109,8 @@ app.use('/api', (req, res, next) => {
   // on the same office NAT would otherwise exhaust each other's attempt budget).
   if (supplied) {
     const count = (rec?.count || 0) + 1;
-    if (count >= 5) logWarn('auth', `IP ${ip} locked out after ${count} failed login attempts.`);
+    logWarn('auth', `Failed login from ${cleanIp(ip)} (attempt ${count}).`);
+    if (count >= 5) logWarn('auth', `IP ${cleanIp(ip)} locked out for 60s after ${count} failed attempts.`);
     failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0, last: Date.now() });
   }
   res.status(401).json({ error: 'Unauthorized' });
@@ -359,7 +380,7 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
   if (!excelFile) throw new Error('Please upload the Excel file (employees).');
   if (!zipFile) throw new Error('Please upload the ZIP file (PDFs).');
 
-  logInfo('payslips', `Upload received: ${excelFile.originalname || 'excel'} + ${zipFile.originalname || 'zip'} (${Math.round((zipFile.size || 0) / 1048576)} MB ZIP).`);
+  logInfo('payslips', `Upload from ${cleanIp(req.ip)}: ${excelFile.originalname || 'excel'} + ${zipFile.originalname || 'zip'} (${Math.round((zipFile.size || 0) / 1048576)} MB ZIP).`);
   const apiKey = getAnthropicApiKey();
   const outcome = await runPayslipJob(excelFile.buffer, zipFile.buffer, apiKey);
 
@@ -435,7 +456,7 @@ app.post('/api/payslips/send', wrap((req, res) => {
     status
   }, recipients);
 
-  logInfo('campaign', `Created payslip campaign "${name.trim()}" with ${recipients.length} recipient(s) (run ${run_id}).`);
+  logInfo('campaign', `${cleanIp(req.ip)} created payslip campaign "${name.trim()}" — ${recipients.length} recipient(s) (run ${run_id}).`);
   res.json({ id, accepted: recipients.length });
 }));
 
