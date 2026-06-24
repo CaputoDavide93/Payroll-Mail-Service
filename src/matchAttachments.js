@@ -62,8 +62,8 @@ async function aiMatchBatch(recipients, filenames, apiKey) {
 Recipients (JSON):
 ${JSON.stringify(recipients.map((r) => ({ email: sanitize(r.email), name: sanitize(r.name) })), null, 2)}
 
-Available files:
-${filenames.map((f, i) => `${i + 1}. ${sanitize(f)}`).join('\n')}
+Available files (JSON array — match against these exact strings):
+${JSON.stringify(filenames.map((f) => sanitize(f)), null, 2)}
 
 Match each recipient to their file. Be flexible: handle different separators (space, underscore, hyphen, dot), case differences, reversed name order (last first vs first last), accents, initials, and abbreviations.
 
