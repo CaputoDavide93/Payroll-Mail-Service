@@ -21,14 +21,20 @@ function promptLogin() {
 
 $('#loginForm').addEventListener('submit', async (e) => {
   e.preventDefault();
-  appPassword = $('#loginPassword').value;
-  sessionStorage.setItem('appPassword', appPassword);
+  const pw = $('#loginPassword').value;
+  const errEl = $('#loginError');
+  errEl.className = 'status'; errEl.textContent = 'Checking…';
   try {
-    await api('/api/logs?since=999999999'); // cheap auth probe
-    $('#loginDialog').close();
-    poll(); // kick off immediately
+    const res = await fetch('/api/logs?since=999999999', { headers: { 'x-app-password': pw } });
+    if (res.status === 429) { errEl.className = 'status err'; errEl.textContent = 'Too many attempts — wait about a minute, then enter the password once.'; return; }
+    if (res.status === 401) { errEl.className = 'status err'; errEl.textContent = 'Wrong password, try again.'; return; }
+    if (!res.ok) { errEl.className = 'status err'; errEl.textContent = 'Login failed (server error ' + res.status + '). Try again shortly.'; return; }
+    appPassword = pw;
+    sessionStorage.setItem('appPassword', appPassword);
+    errEl.textContent = '';
+    location.reload();
   } catch {
-    $('#loginError').textContent = 'Wrong password, try again.';
+    errEl.className = 'status err'; errEl.textContent = 'Network error — check your connection and try again.';
   }
 });
 
