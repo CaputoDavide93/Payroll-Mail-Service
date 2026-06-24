@@ -9,7 +9,12 @@ async function api(path) {
   const res = await fetch(path, { headers });
   let data = null;
   try { data = await res.json(); } catch { /* none */ }
-  if (res.status === 401) { promptLogin(); throw new Error('Unauthorized'); }
+  if (res.status === 401) {
+    // Clear the rejected password so auto-refreshing pages stop resending it (a bad
+    // password resent every few seconds is what triggers repeated brute-force lockouts).
+    appPassword = ''; sessionStorage.removeItem('appPassword');
+    promptLogin(); throw new Error('Unauthorized');
+  }
   if (!res.ok) throw new Error((data && data.error) || `Request failed (${res.status})`);
   return data;
 }
