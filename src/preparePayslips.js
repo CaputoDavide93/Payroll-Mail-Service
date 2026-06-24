@@ -214,7 +214,9 @@ If no issues found: {"issues":[],"all_clear":true,"summary":"All assignments loo
       })
     });
 
-    if (!res.ok) throw new Error(`Claude API error ${res.status}`);
+    if (!res.ok) throw new Error(res.status === 401
+      ? 'Anthropic API key was rejected (401). Check the key in Settings — it may be wrong, expired, or have extra spaces.'
+      : `Claude API error ${res.status}`);
 
     const data = await res.json();
     const text = data.content?.[0]?.text || '';

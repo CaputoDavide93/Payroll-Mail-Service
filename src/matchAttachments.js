@@ -91,7 +91,9 @@ Only include recipients you matched. Skip unmatched ones.`;
   clearTimeout(timer);
 
   if (!res.ok) {
-    throw new Error(`Claude API error ${res.status}`);  // don't surface raw API response
+    throw new Error(res.status === 401  // don't surface raw API response
+      ? 'Anthropic API key was rejected (401). Check the key in Settings — it may be wrong, expired, or have extra spaces.'
+      : `Claude API error ${res.status}`);
   }
 
   const data = await res.json();

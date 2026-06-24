@@ -24,7 +24,7 @@ export function getPublicSettings() {
 }
 
 export function getAnthropicApiKey() {
-  return getSettings().anthropic_api_key || process.env.ANTHROPIC_API_KEY || '';
+  return (getSettings().anthropic_api_key || process.env.ANTHROPIC_API_KEY || '').trim();
 }
 
 const updateStmt = db.prepare(`
@@ -91,9 +91,11 @@ export function updateSettings(input) {
     from_email,
     from_name: input.from_name ?? current.from_name,
     daily_limit: Math.max(1, toInt(input.daily_limit, current.daily_limit)),
-    anthropic_api_key: input.anthropic_api_key !== undefined
-      ? (input.anthropic_api_key || current.anthropic_api_key)
-      : current.anthropic_api_key
+    anthropic_api_key: (() => {
+      if (input.anthropic_api_key === undefined || input.anthropic_api_key === null) return current.anthropic_api_key;
+      const k = String(input.anthropic_api_key).trim(); // strip whitespace/newlines from pasted keys
+      return k.length === 0 ? current.anthropic_api_key : k; // blank = keep existing
+    })()
   };
   updateStmt.run(merged);
   return getPublicSettings();
@@ -114,7 +116,7 @@ export function seedFromEnv() {
       from_email: env.FROM_EMAIL || env.SMTP_USER,
       from_name: env.FROM_NAME,
       daily_limit: env.DAILY_LIMIT,
-      anthropic_api_key: env.ANTHROPIC_API_KEY
+      anthropic_api_key: (env.ANTHROPIC_API_KEY || '').trim()
     });
   }
 }
