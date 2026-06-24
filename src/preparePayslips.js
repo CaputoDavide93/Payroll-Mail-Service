@@ -9,6 +9,7 @@ import * as XLSX from 'xlsx';
 import { matchAttachments } from './matchAttachments.js';
 import { DATA_DIR } from './db.js';
 import { getAnthropicApiKey } from './settings.js';
+import { logInfo, logWarn, logError, logSuccess } from './logbus.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -132,7 +133,7 @@ export function extractZip(buffer, destFolder) {
       zipfile.on('end', () => {
         if (settled) return;
         settled = true;
-        if (extracted.length === 0) console.error('[extractZip] 0 PDFs extracted — diag:', JSON.stringify(diag));
+        if (extracted.length === 0) { console.error('[extractZip] 0 PDFs extracted — diag:', JSON.stringify(diag)); logWarn('payslips', `ZIP yielded 0 PDFs (entries=${diag.entries}, non-pdf=${diag.nonPdf}).`); }
         resolve(extracted);
       });
 
@@ -333,13 +334,16 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
   fs.mkdirSync(rawDir, { recursive: true });
   fs.mkdirSync(protectedDir, { recursive: true });
   const runName = friendlyRunName();
+  logInfo('payslips', `Preparing "${runName}" (run ${runId})…`);
 
   try {
     const recipients = parseExcel(xlsxBuffer);
     if (!recipients.length) throw new Error('No valid recipients found in Excel file.');
+    logInfo('payslips', `Parsed ${recipients.length} employee(s) from the spreadsheet.`);
 
     const extractedFiles = await extractZip(zipBuffer, rawDir);
     if (extractedFiles.length === 0) throw new Error('No valid PDF files found in the uploaded ZIP.');
+    logInfo('payslips', `Extracted ${extractedFiles.length} PDF(s) from the ZIP.`);
 
     const { matched, unmatched, unmatched_files, ai_errors } = await matchAttachments(
       recipients.map((r) => ({ email: r.email, name: r.name })),
@@ -364,6 +368,9 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
       return { email: u.email, name: u.name, ni_no: rec?.ni_no || '' };
     });
 
+    logInfo('payslips', `Matched ${pending.length}, ${unmatchedFull.length} recipient(s) without a file, ${no_ni.length} missing NI, ${unmatched_files.length} unassigned file(s).`);
+    if (ai_errors && ai_errors.length) logWarn('payslips', `AI matching had ${ai_errors.length} issue(s); fuzzy matching used as fallback.`);
+
     // Persist pending state (includes NI nos — server-side only, deleted after confirm)
     const pendingFile = path.join(PAYSLIPS_DIR, runId, 'pending.json');
     fs.writeFileSync(pendingFile, JSON.stringify({ name: runName, pending, unmatched: unmatchedFull, unmatched_files, ai_errors, no_ni }));
@@ -379,6 +386,7 @@ export async function prepareForReview(xlsxBuffer, zipBuffer, apiKey) {
       ai_errors
     };
   } catch (err) {
+    logError('payslips', `Prepare failed for run ${runId}: ${err.message}`);
     fs.rmSync(path.join(PAYSLIPS_DIR, runId), { recursive: true, force: true });
     throw err;
   }
@@ -417,6 +425,7 @@ export async function confirmPayslips(runId, selections) {
     toProtect = pending.map((p) => ({ email: p.email, name: p.name, ni_no: p.ni_no, filename: p.filename, confidence: p.confidence }));
   }
   if (!toProtect.length) throw new Error('No payslips selected for protection.');
+  logInfo('payslips', `Protecting ${toProtect.length} payslip(s) for run ${runId}…`);
 
   const protectedDir = path.join(runDir, 'protected');
   const results = [];
@@ -450,6 +459,8 @@ export async function confirmPayslips(runId, selections) {
     throw new Error('All PDF protections failed. Check qpdf is installed correctly.');
   }
 
+  if (protect_errors.length) logWarn('payslips', `${protect_errors.length} payslip(s) failed to protect for run ${runId}.`);
+  logSuccess('payslips', `Protected ${results.length} payslip(s) for run ${runId}.`);
   const runName = pendingName || friendlyRunName();
   const outcome = { results, unmatched, unmatched_files, protect_errors, ai_errors: ai_errors || [], run_id: runId, name: runName };
   fs.writeFileSync(path.join(runDir, 'results.json'), JSON.stringify(outcome));
@@ -476,6 +487,7 @@ export function cleanupStaleRuns(ttlMs = STALE_RUN_TTL_MS) {
       if (age > ttlMs) { fs.rmSync(runPath, { recursive: true, force: true }); removed++; }
     } catch { /* ignore */ }
   }
+  if (removed > 0) logInfo('cleanup', `Removed ${removed} abandoned run(s) older than ${Math.round(ttlMs / 60000)} min.`);
   return removed;
 }
 

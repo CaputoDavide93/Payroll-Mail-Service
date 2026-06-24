@@ -19,6 +19,7 @@ import { getAnthropicApiKey } from './src/settings.js';
 import XLSX from 'xlsx';
 import { Worker } from 'node:worker_threads';
 import { toSqlTime } from './src/time.js';
+import { logInfo, logWarn, getRecent, ingest } from './src/logbus.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -88,6 +89,7 @@ app.use('/api', (req, res, next) => {
   // on the same office NAT would otherwise exhaust each other's attempt budget).
   if (supplied) {
     const count = (rec?.count || 0) + 1;
+    if (count >= 5) logWarn('auth', `IP ${ip} locked out after ${count} failed login attempts.`);
     failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0, last: Date.now() });
   }
   res.status(401).json({ error: 'Unauthorized' });
@@ -328,7 +330,8 @@ function runPayslipJob(excelBuffer, zipBuffer, apiKey) {
       reject(new Error('Payslip preparation timed out. Please try a smaller batch.'));
     }, 120_000); // 2 minutes
 
-    worker.once('message', (msg) => {
+    worker.on('message', (msg) => {
+      if (msg && msg.__log) { ingest(msg.__log); return; }   // live log from the worker thread
       clearTimeout(timeout);
       if (msg?.ok) return resolve(msg.result);
       reject(new Error(msg?.error || 'Payslip preparation failed.'));
@@ -356,6 +359,7 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
   if (!excelFile) throw new Error('Please upload the Excel file (employees).');
   if (!zipFile) throw new Error('Please upload the ZIP file (PDFs).');
 
+  logInfo('payslips', `Upload received: ${excelFile.originalname || 'excel'} + ${zipFile.originalname || 'zip'} (${Math.round((zipFile.size || 0) / 1048576)} MB ZIP).`);
   const apiKey = getAnthropicApiKey();
   const outcome = await runPayslipJob(excelFile.buffer, zipFile.buffer, apiKey);
 
@@ -431,6 +435,7 @@ app.post('/api/payslips/send', wrap((req, res) => {
     status
   }, recipients);
 
+  logInfo('campaign', `Created payslip campaign "${name.trim()}" with ${recipients.length} recipient(s) (run ${run_id}).`);
   res.json({ id, accepted: recipients.length });
 }));
 
@@ -463,6 +468,12 @@ app.delete('/api/payslips/runs/:runId', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
+// Live application log feed for the Logs page (polled). Auth-protected via the /api guard.
+app.get('/api/logs', wrap((req, res) => {
+  const since = Number(req.query.since) || 0;
+  res.json({ entries: getRecent(since) });
+}));
+
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   // Force the browser to revalidate HTML/JS/CSS each load so deploys take effect
@@ -485,8 +496,7 @@ if (!APP_PASSWORD && process.env.ALLOW_NO_AUTH !== '1') {
 
 const server = app.listen(PORT, () => {
   console.log(`Payroll Mail Service listening on http://localhost:${PORT}`);
-  if (APP_PASSWORD) console.log('Password protection is ENABLED.')
-  else console.warn('WARNING: APP_PASSWORD is not set — running UNAUTHENTICATED (ALLOW_NO_AUTH=1).')
+  logInfo('server', `Listening on port ${PORT}. Password protection ${APP_PASSWORD ? 'ENABLED' : 'DISABLED (ALLOW_NO_AUTH)'}.`);
   startWorker();
 });
 

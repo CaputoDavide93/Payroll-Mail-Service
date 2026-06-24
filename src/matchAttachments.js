@@ -1,4 +1,5 @@
 import fs from 'node:fs';
+import { logInfo } from './logbus.js';
 import path from 'node:path';
 
 const SUPPORTED_EXTS = new Set(['.pdf', '.docx', '.doc', '.xlsx', '.xls', '.png', '.jpg', '.jpeg']);
@@ -115,6 +116,7 @@ async function aiMatch(recipients, filenames, apiKey) {
     batches.push(recipients.slice(i, i + AI_BATCH_SIZE));
   }
 
+  logInfo('match', `AI matching ${recipients.length} recipient(s) in ${batches.length} batch(es) of up to ${AI_BATCH_SIZE}…`);
   const results = [];
   const errors = [];
   for (let i = 0; i < batches.length; i += AI_CONCURRENCY) {

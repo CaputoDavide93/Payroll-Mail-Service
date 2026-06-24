@@ -1,4 +1,5 @@
 import db from './db.js';
+import { log as busLog } from './logbus.js';
 import { getSettings } from './settings.js';
 import { buildTransport, sendOne, fromHeaderFor } from './mailer.js';
 import { campaignStats, setStatus } from './campaigns.js';
@@ -11,7 +12,7 @@ let running = false;
 let stopping = false;
 let intervalId = null;
 
-const log = (...args) => console.log(new Date().toISOString(), '[worker]', ...args);
+const log = (...args) => busLog('info', 'worker', args.map((a) => (typeof a === 'string' ? a : JSON.stringify(a))).join(' '));
 
 const currentStatusStmt = db.prepare('SELECT status FROM campaigns WHERE id = ?');
 

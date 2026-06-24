@@ -29,7 +29,8 @@
 | 🔁 **Crash-Safe Resume** | SQLite-backed — restarts pick up exactly where they left off |
 | 📊 **Live Dashboard** | Sent / pending / failed counts, progress bar, pause / resume / stop / retry |
 | 🔒 **UI Password** | Optional `APP_PASSWORD` locks the web UI for cloud deployments |
-| 📋 **Payslip Sender** | AI-matched, NI-password-protected, per-recipient PDF payslips |
+| 📋 **Payslip Sender** | AI-matched, reviewed & approved, NI-password-protected, per-recipient PDF payslips |
+| 📜 **Live Logs** | A built-in Logs page streams what the server is doing in real time — uploads, matching, protection, sends, errors |
 
 ---
 
@@ -137,16 +138,21 @@ Use **Send preview** on any campaign to email yourself the rendered message with
 
 A dedicated workflow for sending each employee their own password-protected PDF payslip.
 
-### How It Works
+The workflow is **two-phase**: matching is prepared for review first, and PDFs are
+only encrypted **after you explicitly approve** the matches.
 
 | Step | What Happens |
 |------|-------------|
-| **1. Upload** | Upload the employee Excel file + a ZIP of all payslip PDFs |
-| **2. AI Match** | Claude AI + fuzzy matching pairs each PDF to the right employee by name |
-| **3. Protect** | Each PDF is encrypted with the employee's NI number as the password (256-bit AES via `qpdf`) |
-| **4. Pre-flight** | Optional AI review flags suspicious pairings before a single email is sent |
-| **5. Send** | A per-recipient campaign is created — each person gets only their own payslip |
-| **6. Cleanup** | Delete all PDFs and match data from the server when done |
+| **1. Upload** | Upload the employee spreadsheet (`.xlsx/.xls/.xlsm/.xlsb/.ods/.csv`) + a ZIP of all payslip PDFs. A progress bar shows extract → AI-match stages. |
+| **2. Review** | Claude AI (in parallel batches) + fuzzy matching pair each PDF to an employee. A **review table** shows every match with a confidence badge — **high** (full name intact in the filename), **amber/medium**, or **red/low / unmatched**. Each row has a **dropdown to correct or assign** the right file, and a Remove button. |
+| **3. Approve & Protect** | Only when you click **Approve & Protect** does `qpdf` encrypt the approved PDFs with each employee's NI number (256-bit AES). The same file can't be assigned to two people. Per-recipient failures are listed. |
+| **4. Pre-flight** | Optional AI review flags suspicious pairings before a single email is sent (requires an Anthropic API key). |
+| **5. Send** | A per-recipient campaign is created — each person gets only their own payslip. |
+| **6. Cleanup** | Delete PDFs and match data from **Server data** when done. Unapproved runs are auto-deleted after 1 hour. |
+
+> **Matching without an API key:** if no Anthropic key is set, matching falls back to
+> fuzzy name-matching only (no AI). It still works — confidence is graded by how well the
+> name matches the filename — but setting a key improves accuracy and enables the pre-flight check.
 
 ### Excel Format
 
@@ -159,10 +165,25 @@ A dedicated workflow for sending each employee their own password-protected PDF 
 
 ### Security Notes
 
-- NI numbers are **never** stored, logged, or returned by any API — used only at the moment of PDF encryption
-- Raw (unprotected) PDFs are deleted from disk as soon as protection completes
-- Set `ANTHROPIC_API_KEY` as an environment variable — it is not entered via the UI
-- ZIP uploads are capped (200 MB total, 25 MB per PDF, 500 files) to prevent ZIP bombs; preparation runs in an isolated worker with a safety timeout.
+- **NI numbers** are held server-side only in a temporary `pending.json` during the review
+  step (so the spot-check UI can show them and they can be used as the encryption password),
+  and are deleted the moment you approve. They are never written to logs. At encryption time
+  they are passed to `qpdf` via a `chmod 600` argument file — **not** on the command line — so
+  they never appear in process listings (`ps` / `/proc`).
+- **Raw (unprotected) PDFs** are deleted from disk as soon as protection completes. A
+  background sweep also removes any **unapproved** run (raw PDFs + `pending.json`) after 1 hour,
+  so abandoned uploads and worker timeouts don't leave PII on disk.
+- The **Anthropic API key** can be set in **⚙️ Settings** in the UI (stored in the DB) or seeded
+  via the `ANTHROPIC_API_KEY` environment variable. The key is masked on read.
+- **Filenames** in the ZIP are sanitised (accents normalised, path separators and control
+  characters removed, directory components stripped) — no path traversal, and real-world names
+  like `Payslip (June).pdf` or `O'Brien.pdf` are handled instead of being dropped.
+- **ZIP uploads** are capped (200 MB total uncompressed — enforced on real streamed bytes, 25 MB
+  per PDF, 500 files) to prevent ZIP bombs; extraction uses streaming `yauzl` (handles large /
+  zip64 archives) and runs in an isolated worker thread with a safety timeout.
+- **Authentication**: the server refuses to start without `APP_PASSWORD` set, so it can't be
+  accidentally exposed unauthenticated (set `ALLOW_NO_AUTH=1` to override for local development).
+  The password check is constant-time, with per-IP brute-force throttling.
 
 ### Navigate to Payslips
 
@@ -183,8 +204,9 @@ Set in **⚙️ Settings** in the UI, or seed via environment variables. Copy `.
 | `FROM_EMAIL` | Address shown as sender | `SMTP_USER` |
 | `FROM_NAME` | Name shown as sender | – |
 | `DAILY_LIMIT` | Max emails per rolling 24 h | `1800` |
-| `APP_PASSWORD` | Locks the web UI (recommended on cloud) | – (off) |
-| `ANTHROPIC_API_KEY` | Enables AI matching + pre-flight check for payslips | – (off) |
+| `APP_PASSWORD` | Locks the web UI. **Required** — the server won't start without it. | – (required) |
+| `ALLOW_NO_AUTH` | Set to `1` to allow starting without `APP_PASSWORD` (local/dev only — never in production). | – (off) |
+| `ANTHROPIC_API_KEY` | Enables AI matching + pre-flight check for payslips. Can also be set in ⚙️ Settings. | – (off) |
 | `PORT` | Port to serve on | `3000` |
 | `DATA_DIR` | Database + uploads location | `data` (`/data` in Docker) |
 
@@ -245,7 +267,8 @@ Sending hundreds of near-identical emails is exactly what spam filters watch for
 - **State:** Single SQLite file (`better-sqlite3`) under `DATA_DIR` holds settings, campaigns, and every recipient's status — what makes crash-safe resume possible.
 - **Worker:** Background loop wakes every 2 s, promotes scheduled campaigns, sends the next batch (respecting the pause and daily cap), retries each failed send up to 3 times, and marks the campaign *completed* when the queue is empty.
 - **Atomic claim:** Before sending a batch, recipients are marked `sending` in a single transaction — a crash can't cause double-sends; the startup hook resets `sending → pending`.
-- **Payslips:** AI + fuzzy name matching, `qpdf` 256-bit AES encryption, raw PDFs deleted immediately after protection, NI numbers never persisted.
+- **Payslips:** two-phase — prepare (extract + AI/fuzzy match) runs in an isolated worker thread; you review & correct matches, then approval triggers `qpdf` 256-bit AES encryption. Raw PDFs are deleted after protection; unapproved runs are swept after 1 hour.
+- **Logs:** an in-memory ring buffer captures key events (uploads, matching, protection, sends, errors) and is streamed to the Logs page; also written to stdout for `docker logs`.
 - **Frontend:** Static HTML/CSS/JS — no build step.
 
 ---
@@ -260,9 +283,11 @@ src/mailer.js             Transport, template rendering, sending
 src/parseRecipients.js    CSV parsing & validation
 src/campaigns.js          Campaign / recipient queries
 src/worker.js             Background batch-sending loop
-src/preparePayslips.js    Payslip pipeline (match → protect → manage)
-src/matchAttachments.js   AI + fuzzy PDF-to-employee matching
-public/                   Web UI (campaigns + payslips pages)
+src/preparePayslips.js    Payslip pipeline (extract → match → review → protect → manage)
+src/payslipJobWorker.js   Worker thread that runs prepare off the event loop
+src/matchAttachments.js   AI (batched) + fuzzy PDF-to-employee matching
+src/logbus.js             In-memory log ring buffer + live event stream
+public/                   Web UI (campaigns + payslips + logs pages)
 Dockerfile
 docker-compose.yml
 .env.example
@@ -311,7 +336,25 @@ brew install qpdf
 <details>
 <summary>❌ No AI matching — payslips only use fuzzy match</summary>
 
-Set the `ANTHROPIC_API_KEY` environment variable in your `.env` file and rebuild the container. The key is not configurable via the UI.
+Set the Anthropic API key in **⚙️ Settings** (or the `ANTHROPIC_API_KEY` env var). Without it, matching uses fuzzy name-matching only and the pre-flight check is skipped. Fuzzy matching still grades confidence (high when the full name is in the filename).
+</details>
+
+<details>
+<summary>❌ Server won't start — "FATAL: APP_PASSWORD is not set"</summary>
+
+The server refuses to run unauthenticated. Set `APP_PASSWORD` in your `.env`. For local development only, you can set `ALLOW_NO_AUTH=1` to bypass.
+</details>
+
+<details>
+<summary>❌ The review/approval table doesn't appear after Prepare</summary>
+
+You're almost certainly running a **stale cached** copy of the page. Hard-refresh: <kbd>Cmd/Ctrl</kbd> + <kbd>Shift</kbd> + <kbd>R</kbd>. Assets are versioned and served `no-cache`, so a single hard refresh fixes it.
+</details>
+
+<details>
+<summary>❌ "No valid PDF files found in the uploaded ZIP" / "Could not read the ZIP file"</summary>
+
+The ZIP must contain `.pdf` files. Large/zip64 archives are supported. "Could not read the ZIP" means the file is corrupted or truncated — re-export it. Filenames with spaces, accents, parentheses or apostrophes are fine (they're sanitised on extract).
 </details>
 
 <details>
