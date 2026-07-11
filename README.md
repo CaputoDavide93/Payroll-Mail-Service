@@ -154,7 +154,8 @@ A dedicated workflow for sending each employee their own password-protected PDF 
 
 - NI numbers are **never** stored, logged, or returned by any API — used only at the moment of PDF encryption
 - Raw (unprotected) PDFs are deleted from disk as soon as protection completes
-- Set `ANTHROPIC_API_KEY` as an environment variable — it is not entered via the UI
+- The Anthropic API key can be provided via `ANTHROPIC_API_KEY` or in Settings — stored locally, never echoed back to the UI
+- Full data-handling policy and vulnerability reporting: [SECURITY.md](SECURITY.md)
 
 ### Navigate to Payslips
 
@@ -303,7 +304,7 @@ brew install qpdf
 <details>
 <summary>❌ No AI matching — payslips only use fuzzy match</summary>
 
-Set the `ANTHROPIC_API_KEY` environment variable in your `.env` file and rebuild the container. The key is not configurable via the UI.
+Set the `ANTHROPIC_API_KEY` environment variable in your `.env` file and rebuild the container, or paste the key in **Settings** (it's stored locally and never echoed back).
 </details>
 
 <details>
