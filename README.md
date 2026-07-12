@@ -1,14 +1,14 @@
 <div align="center">
 
-# ✉️ Payroll Mail Service
+# 💸 Payroll Mail Service
 
-> **Send personalised, password-protected payslips to your whole team — safely, in batches, from a single page**
+**Send personalised, password-protected payslips to your whole team — safely, in batches, from a single page**
 
-![Node.js](https://img.shields.io/badge/Node.js-5FA04E?style=for-the-badge&logo=nodedotjs&logoColor=white)
-![Express](https://img.shields.io/badge/Express-000000?style=for-the-badge&logo=express&logoColor=white)
-![SQLite](https://img.shields.io/badge/SQLite-003B57?style=for-the-badge&logo=sqlite&logoColor=white)
-![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
-![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge)
+![Node.js](https://img.shields.io/badge/Node.js-5FA04E?logo=nodedotjs&logoColor=white)
+![Express](https://img.shields.io/badge/Express-000000?logo=express&logoColor=white)
+![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![License: MIT](https://img.shields.io/badge/License-MIT-yellow)
 
 [Features](#-features) • [Quick Start](#-quick-start) • [Payslips](#-personalised-payslip-sender) • [Configuration](#️-configuration) • [How It Works](#-how-it-works) • [Troubleshooting](#-troubleshooting)
 
@@ -349,12 +349,12 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 **Davide Caputo**
 
-[![GitHub](https://img.shields.io/badge/GitHub-CaputoDavide93-181717?style=for-the-badge&logo=github)](https://github.com/CaputoDavide93)
+[![GitHub](https://img.shields.io/badge/GitHub-CaputoDavide93-181717?logo=github)](https://github.com/CaputoDavide93)
 
 ---
 
 ⭐ **If this tool helped you, please give it a star!** ⭐
 
-<sub>Made with ❤️ by Davide Caputo</sub>
+<p align="center"><sub>Made with ❤️ by <a href="https://github.com/CaputoDavide93">Davide Caputo</a></sub></p>
 
 </div>
