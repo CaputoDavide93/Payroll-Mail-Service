@@ -343,18 +343,4 @@ This project is licensed under the MIT License — see the [LICENSE](LICENSE) fi
 
 ---
 
-<div align="center">
-
-## 👤 Author
-
-**Davide Caputo**
-
-[![GitHub](https://img.shields.io/badge/GitHub-CaputoDavide93-181717?logo=github)](https://github.com/CaputoDavide93)
-
----
-
-⭐ **If this tool helped you, please give it a star!** ⭐
-
-<p align="center"><sub>Made with ❤️ by <a href="https://github.com/CaputoDavide93">Davide Caputo</a></sub></p>
-
-</div>
+<p align="center">⭐ <b>If this tool helped you, please give it a star!</b> ⭐&ensp;·&ensp;<sub>Made with ❤️ by <a href="https://github.com/CaputoDavide93">Davide Caputo</a></sub></p>
