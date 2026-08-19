@@ -30,7 +30,7 @@ variable "root_volume_size_gb" {
 variable "ssh_cidr" {
   type        = string
   default     = "0.0.0.0/0"
-  description = "CIDR allowed SSH access. Restrict to your IP: e.g. \"81.2.69.142/32\"."
+  description = "CIDR allowed SSH + app (port 3000) access. Restrict to office IP: e.g. \"81.2.69.142/32\"."
 }
 
 variable "git_repo_url" {
