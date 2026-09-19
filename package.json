@@ -12,7 +12,7 @@
     "node": ">=20"
   },
   "dependencies": {
-    "adm-zip": "^0.5.17",
+    "adm-zip": "^0.6.1",
     "better-sqlite3": "^11.8.1",
     "csv-parse": "^5.6.0",
     "express": "^4.21.2",
