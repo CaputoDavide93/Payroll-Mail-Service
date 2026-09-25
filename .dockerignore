@@ -6,6 +6,6 @@ data
 npm-debug.log
 .gstack
 terraform
-test
-deploy.sh
+tests
+scripts
 *.pem

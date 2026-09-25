@@ -1,5 +1,5 @@
 import { parentPort, workerData } from 'node:worker_threads';
-import { preparePayslips } from './preparePayslips.js';
+import { preparePayslips } from './prepare-payslips.js';
 
 (async () => {
   try {

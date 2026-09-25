@@ -6,7 +6,7 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import AdmZip from 'adm-zip';
 import * as XLSX from 'xlsx';
-import { extractZip, parseExcel, protectPdf } from '../src/preparePayslips.js';
+import { extractZip, parseExcel, protectPdf } from '../src/prepare-payslips.js';
 
 function makeZip(entries) {
   const zip = new AdmZip();

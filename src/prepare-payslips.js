@@ -6,7 +6,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import AdmZip from 'adm-zip';
 import * as XLSX from 'xlsx';
-import { matchAttachments } from './matchAttachments.js';
+import { matchAttachments } from './match-attachments.js';
 import { DATA_DIR } from './db.js';
 import { getAnthropicApiKey } from './settings.js';
 

@@ -10,7 +10,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'retention-'));
 let pp;
 let campaigns;
 before(async () => {
-  pp = await import('../src/preparePayslips.js');
+  pp = await import('../src/prepare-payslips.js');
   campaigns = await import('../src/campaigns.js');
 });
 

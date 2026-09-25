@@ -2,7 +2,7 @@ import db from './db.js';
 import { getSettings } from './settings.js';
 import { buildTransport, sendOne, fromHeaderFor } from './mailer.js';
 import { campaignStats, setStatus, hasPendingAttachment } from './campaigns.js';
-import { DELETE_AFTER_SEND, deletePayslipFile } from './preparePayslips.js';
+import { DELETE_AFTER_SEND, deletePayslipFile } from './prepare-payslips.js';
 
 const TICK_MS = 2000;
 const MAX_ATTEMPTS = 3;

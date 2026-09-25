@@ -24,7 +24,7 @@ diagram, and text contrast at or above 4.5:1 in both schemes.
 
 The app is Node; this script needs only the Python standard library. Run it
 after changing a diagram (python3 tools/gen_diagram.py) and commit the SVGs it
-writes; test/diagrams.test.js checks the pages that embed them.
+writes; tests/diagrams.test.js checks the pages that embed them.
 """
 from __future__ import annotations
 
@@ -233,7 +233,7 @@ def aws_deployment(scheme):
     """The Terraform deployment: one instance, reachable from the office only."""
     k = Canvas(1180, 608, scheme,
                "An office browser reaches nginx on one EC2 instance over HTTPS; nginx proxies to "
-               "the app container. Secrets Manager supplies the .env at boot. ./deploy.sh pushes "
+               "the app container. Secrets Manager supplies the .env at boot. scripts/deploy.sh pushes "
                "the image to ECR and tells the instance over SSM to run payroll-update, which "
                "pulls the tag, health-checks it and rolls back on failure. payroll-cert keeps the "
                "Let's Encrypt certificate current using a Route53 DNS-01 challenge.")
@@ -276,7 +276,7 @@ def aws_deployment(scheme):
         k.edge([(ax + w / 2, r2 + 100 + 8), (ax + w / 2, by + 42), (250 + 8, by + 42)]),
         k.text(ax + w / 2 - 12, by + 33, "TXT record", size=11.5, font=MONO, colour=c["chip"],
                anchor="end"),
-        k.box(940, by, 216, 84, "./deploy.sh", ["builds and pushes,", "then rolls the instance"],
+        k.box(940, by, 216, 84, "scripts/deploy.sh", ["builds and pushes,", "then rolls the instance"],
               icon="terminal"),
         k.edge([(1048, by - 8), (1048, r2 + 100 + 8)]),
         k.text(1036, by - 26, "push :sha, :latest, :base", size=11.5, font=MONO, colour=c["chip"], anchor="end"),

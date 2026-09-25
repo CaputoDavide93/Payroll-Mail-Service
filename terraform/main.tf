@@ -3,7 +3,7 @@
 # =============================================================================
 # Single t3.micro with Elastic IP at https://<domain_name> (office IPs
 # only). nginx on the instance terminates TLS with a Let's Encrypt certificate.
-# The instance pulls its image from ECR (deploy.sh builds and pushes it).
+# The instance pulls its image from ECR (scripts/deploy.sh builds and pushes it).
 # Secrets stored in AWS Secrets Manager. Keep it stopped between pay runs.
 #
 # First-time setup:
@@ -18,7 +18,7 @@
 #        export TF_VAR_anthropic_api_key="sk-ant-..."   # optional
 #   5. terraform plan
 #   6. terraform apply
-#   7. ../deploy.sh   # build + push the image to ECR and roll the instance
+#   7. ../scripts/deploy.sh   # build + push the image to ECR and roll the instance
 #
 # After apply:
 #   - Secrets are in AWS Secrets Manager (payroll-mail-service/prod/config)

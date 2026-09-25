@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseRecipients } from '../src/parseRecipients.js';
+import { parseRecipients } from '../src/parse-recipients.js';
 
 describe('parseRecipients', () => {
   it('parses valid rows and skips invalid/duplicate emails', () => {

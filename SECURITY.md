@@ -14,7 +14,7 @@ parties beyond the SMTP provider you configure, and — only if you opt in to AI
 matching — recipient names, email addresses and payslip *filenames* sent to
 the Anthropic API (never payslip contents or NI numbers).
 
-What the code guarantees (see `src/preparePayslips.js`, `server.js`):
+What the code guarantees (see `src/prepare-payslips.js`, `server.js`):
 
 - **NI numbers are never stored, logged, or returned by any API** — they are
   used only at the moment of PDF encryption. They are passed to `qpdf` via a

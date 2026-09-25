@@ -8,13 +8,13 @@ import { fileURLToPath } from 'node:url';
 import { UPLOAD_DIR } from './src/db.js';
 import { getPublicSettings, updateSettings, seedFromEnv } from './src/settings.js';
 import { sendTest, buildTransport, sendOne, fromHeaderFor } from './src/mailer.js';
-import { parseRecipients } from './src/parseRecipients.js';
+import { parseRecipients } from './src/parse-recipients.js';
 import {
   createCampaign, listCampaigns, getCampaign, setStatus,
   campaignStats, failedRecipients, deleteCampaign, requeueFailed, firstRecipient
 } from './src/campaigns.js';
 import { startWorker, stopWorker } from './src/worker.js';
-import { preflightCheck, listRuns, deleteRun, deleteAllRuns, purgeExpiredRuns, RETENTION_DAYS, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { preflightCheck, listRuns, deleteRun, deleteAllRuns, purgeExpiredRuns, RETENTION_DAYS, PAYSLIPS_DIR } from './src/prepare-payslips.js';
 import { hasPendingAttachmentUnder } from './src/campaigns.js';
 import { getAnthropicApiKey } from './src/settings.js';
 import XLSX from 'xlsx';
@@ -322,7 +322,7 @@ function assertRunFilesPresent(outcome) {
 // the event loop. Returns the pipeline outcome or throws if the worker fails.
 function runPayslipJob(excelBuffer, zipBuffer, apiKey) {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(new URL('./src/payslipJobWorker.js', import.meta.url), {
+    const worker = new Worker(new URL('./src/payslip-job-worker.js', import.meta.url), {
       workerData: { excel: excelBuffer, zip: zipBuffer, apiKey }
     });
 

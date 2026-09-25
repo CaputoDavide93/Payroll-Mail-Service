@@ -2,9 +2,9 @@
 # Build the image, push it to ECR (:latest, :base, :<git sha>) and roll the
 # instance to the new sha via SSM Run Command.
 #
-#   ./deploy.sh              build, push, roll
-#   ROLL=0 ./deploy.sh       build and push only
-#   ./deploy.sh --roll <tag> roll the instance to an existing tag (rollback)
+#   scripts/deploy.sh              build, push, roll
+#   ROLL=0 scripts/deploy.sh       build and push only
+#   scripts/deploy.sh --roll <tag> roll the instance to an existing tag (rollback)
 #
 # Don't run it during a payroll send: the container restart pauses the worker
 # (in-flight batches finish first, pending recipients resume on start).
@@ -45,11 +45,11 @@ roll() {
 }
 
 if [ "${1:-}" = "--roll" ]; then
-  roll "${2:?usage: ./deploy.sh --roll <tag>}"
+  roll "${2:?usage: scripts/deploy.sh --roll <tag>}"
   exit 0
 fi
 
-cd "$(dirname "$0")"
+cd "$(dirname "$0")/.."
 if [ -n "$(git status --porcelain)" ]; then
   echo "Working tree is dirty; commit first so the :<sha> tag matches the code." >&2
   exit 1

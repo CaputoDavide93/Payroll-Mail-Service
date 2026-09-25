@@ -130,7 +130,7 @@ resource "aws_instance" "this" {
   })
 
   # A user_data change stops/starts the instance in place (data on the root volume is
-  # kept) but cloud-init won't re-run it: re-run it via SSM (see impl notes / deploy.sh).
+  # kept) but cloud-init won't re-run it: re-run it via SSM (see impl notes / scripts/deploy.sh).
   user_data_replace_on_change = false
 
   lifecycle {

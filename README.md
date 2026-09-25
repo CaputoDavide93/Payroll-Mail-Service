@@ -124,7 +124,7 @@ Bob Jones,bob@example.com,Finance
 - Any extra column (`department`, `location`, etc.) can be used as `{department}` in the email
 - Duplicate or invalid emails are skipped and reported
 
-A ready-to-edit `sample-recipients.csv` is included.
+A ready-to-edit [`config/sample-recipients.example.csv`](config/sample-recipients.example.csv) is included.
 
 ### 3. Create and Send
 
@@ -245,7 +245,7 @@ For team access, put Caddy or Nginx in front on port 443 for automatic HTTPS, an
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/aws-deployment-dark.svg">
   <img src="docs/assets/aws-deployment-light.svg" width="100%"
-       alt="An office browser reaches nginx on one EC2 instance over HTTPS; nginx proxies to the app container. Secrets Manager supplies the .env at boot. ./deploy.sh pushes the image to ECR and tells the instance over SSM to run payroll-update, which pulls the tag, health-checks it and rolls back on failure. payroll-cert keeps the Let's Encrypt certificate current using a Route53 DNS-01 challenge.">
+       alt="An office browser reaches nginx on one EC2 instance over HTTPS; nginx proxies to the app container. Secrets Manager supplies the .env at boot. scripts/deploy.sh pushes the image to ECR and tells the instance over SSM to run payroll-update, which pulls the tag, health-checks it and rolls back on failure. payroll-cert keeps the Let's Encrypt certificate current using a Route53 DNS-01 challenge.">
 </picture>
 
 | Piece | What it does |
@@ -256,14 +256,14 @@ For team access, put Caddy or Nginx in front on port 443 for automatic HTTPS, an
 | `terraform/dns.tf` | A record for `domain_name` in `hosted_zone` pointing at the Elastic IP |
 | `terraform/secrets.tf` | App secret in Secrets Manager (Terraform never overwrites live values), IAM for ECR pull, SSM and the ACME TXT record |
 | `terraform/user_data.sh.tpl` | Boot script: waits for secrets, writes `.env`, starts app + nginx, installs `payroll-cert` (issue/renew, twice daily) and `payroll-update` (pull a tag, health-check, auto-rollback) |
-| `deploy.sh` | Builds and pushes the image, then rolls the instance to the new git SHA over SSM (`./deploy.sh --roll <tag>` to roll back) |
+| `scripts/deploy.sh` | Builds and pushes the image, then rolls the instance to the new git SHA over SSM (`scripts/deploy.sh --roll <tag>` to roll back) |
 
 ```bash
 cd terraform/bootstrap && terraform init && terraform apply && cd ..
 # set the state bucket in main.tf (or: terraform init -backend-config="bucket=...")
 cp terraform.tfvars.example terraform.tfvars   # office_cidrs, hosted_zone, domain_name
 terraform init && terraform apply
-../deploy.sh                                   # build, push to ECR, roll the instance
+../scripts/deploy.sh                           # build, push to ECR, roll the instance
 ```
 
 Fill in the secret in Secrets Manager after the first apply — the instance waits at boot until real values are present. The instance is built to be **stopped between pay runs**: start it, wait ~2 minutes (the certificate is renewed on boot if due), send, then stop it. Don't stop or redeploy while a campaign is sending — the worker finishes its in-flight batch on shutdown and pending recipients resume on the next start.
@@ -306,25 +306,29 @@ Sending hundreds of near-identical emails is exactly what spam filters watch for
 ## 📁 Project Layout
 
 ```
-server.js                 Express app + API routes
-src/db.js                 SQLite schema + migrations
-src/settings.js           SMTP settings (env seeding, secret masking)
-src/mailer.js             Transport, template rendering, sending
-src/parseRecipients.js    CSV parsing & validation
-src/campaigns.js          Campaign / recipient queries
-src/worker.js             Background batch-sending loop
-src/preparePayslips.js    Payslip pipeline (match → protect → manage)
-src/matchAttachments.js   AI + fuzzy PDF-to-employee matching
-src/payslipJobWorker.js   Worker thread running the payslip pipeline
-src/time.js               Timezone-aware schedule parsing
-public/                   Web UI (campaigns + payslips pages)
-test/                     node --test suite
-tools/gen_diagram.py      Draws the README diagrams into docs/assets/
-terraform/                AWS deployment (EC2, ECR, Route53, Secrets Manager)
-deploy.sh                 Build, push to ECR, roll the instance via SSM
+server.js                    Express app + API routes
+src/db.js                    SQLite schema + migrations
+src/settings.js              SMTP settings (env seeding, secret masking)
+src/mailer.js                Transport, template rendering, sending
+src/parse-recipients.js      CSV parsing & validation
+src/campaigns.js             Campaign / recipient queries
+src/worker.js                Background batch-sending loop
+src/prepare-payslips.js      Payslip pipeline (match → protect → manage)
+src/match-attachments.js     AI + fuzzy PDF-to-employee matching
+src/payslip-job-worker.js    Worker thread running the payslip pipeline
+src/time.js                  Timezone-aware schedule parsing
+public/                      Web UI (campaigns + payslips pages)
+tests/                       node --test suite
+scripts/deploy.sh            Build, push to ECR, roll the instance via SSM
+tools/gen_diagram.py         Draws the README diagrams into docs/assets/
+config/                      sample-recipients.example.csv (recipient CSV template)
+docs/assets/                 Diagram SVGs, light and dark
+terraform/                   AWS deployment (EC2, ECR, Route53, Secrets Manager)
 Dockerfile
 docker-compose.yml
 .env.example
+SECURITY.md                  Vulnerability reporting and data handling
+LICENSE
 ```
 
 ---

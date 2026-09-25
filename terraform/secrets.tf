@@ -135,7 +135,7 @@ resource "aws_iam_role_policy" "acme_dns" {
   policy = data.aws_iam_policy_document.acme_dns.json
 }
 
-# SSM Session Manager / Run Command: used by deploy.sh to roll the container,
+# SSM Session Manager / Run Command: used by scripts/deploy.sh to roll the container,
 # and the replacement for SSH.
 resource "aws_iam_role_policy_attachment" "ssm" {
   role       = aws_iam_role.ec2.name
