@@ -26,7 +26,9 @@ instance_id() {
 roll() {
   local tag="$1" id cmd_id status
   id=$(instance_id)
-  [ -n "$id" ] && [ "$id" != "None" ] || { echo "No running payroll-mail-service instance found" >&2; exit 1; }
+  if [ -z "$id" ] || [ "$id" = "None" ]; then
+    echo "No running payroll-mail-service instance found" >&2; exit 1
+  fi
   echo "Rolling $id to $IMAGE:$tag via SSM..."
   cmd_id=$(aws ssm send-command --region "$REGION" --instance-ids "$id" \
     --document-name AWS-RunShellScript \
