@@ -117,3 +117,20 @@ export const requeueFailed = db.transaction((id) => {
   if (changes > 0) reactivateCompletedStmt.run(id);
   return changes;
 });
+
+// Retention helpers: is an attachment (or anything under a run folder) still needed by
+// a recipient that hasn't been sent yet?
+const pendingAttachmentStmt = db.prepare(
+  "SELECT 1 FROM recipients WHERE status IN ('pending','sending') AND attachment_path = ? LIMIT 1"
+);
+export function hasPendingAttachment(attachmentPath) {
+  return !!pendingAttachmentStmt.get(attachmentPath);
+}
+
+const pendingUnderStmt = db.prepare(
+  "SELECT 1 FROM recipients WHERE status IN ('pending','sending') AND substr(attachment_path, 1, ?) = ? LIMIT 1"
+);
+export function hasPendingAttachmentUnder(dir) {
+  const prefix = dir.endsWith('/') ? dir : dir + '/';
+  return !!pendingUnderStmt.get(prefix.length, prefix);
+}

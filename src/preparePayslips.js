@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomBytes } from 'node:crypto';
+import os from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import AdmZip from 'adm-zip';
@@ -11,7 +12,21 @@ import { getAnthropicApiKey } from './settings.js';
 
 const execFileAsync = promisify(execFile);
 
+// Limits to guard against ZIP bombs and oversized uploads
+const MAX_UNZIPPED_BYTES = 200 * 1024 * 1024; // 200 MB across all files
+const MAX_FILES = 500;
+const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB per PDF
+
 export const PAYSLIPS_DIR = path.join(DATA_DIR, 'payslips');
+
+// Retention for protected payslips (payroll PII). Both are env-configurable:
+//   PAYSLIP_DELETE_AFTER_SEND=false  keep each protected PDF after it is sent (default: delete)
+//   PAYSLIP_RETENTION_DAYS=N         delete whole runs N days after preparation (default 7, 0 = never)
+export const DELETE_AFTER_SEND = process.env.PAYSLIP_DELETE_AFTER_SEND !== 'false';
+export const RETENTION_DAYS = (() => {
+  const n = Number(process.env.PAYSLIP_RETENTION_DAYS);
+  return process.env.PAYSLIP_RETENTION_DAYS !== undefined && process.env.PAYSLIP_RETENTION_DAYS !== '' && Number.isFinite(n) && n >= 0 ? n : 7;
+})();
 
 // Verify qpdf is available before attempting any protection.
 async function assertQpdf() {
@@ -49,6 +64,7 @@ export function extractZip(buffer, destFolder) {
   const zip = new AdmZip(buffer);
   const extracted = [];
   const seen = new Set();
+  let totalBytes = 0;
   for (const entry of zip.getEntries()) {
     if (entry.isDirectory) continue;
     if (path.extname(entry.entryName).toLowerCase() !== '.pdf') continue;
@@ -56,27 +72,37 @@ export function extractZip(buffer, destFolder) {
     if (!SAFE_FILENAME_RE.test(safeName)) continue;
     const key = safeName.toLowerCase();
     if (seen.has(key)) throw new Error(`Duplicate PDF filename in ZIP: ${safeName}`);
+    const declaredSize = entry.header?.size || 0; // uncompressed size
+    if (declaredSize > MAX_FILE_BYTES) throw new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`);
+    const data = entry.getData();
+    const realSize = data.length;
+    if (realSize > MAX_FILE_BYTES) throw new Error(`File too large: ${safeName} (> ${Math.round(MAX_FILE_BYTES / 1024 / 1024)} MB)`);
+    if (totalBytes + realSize > MAX_UNZIPPED_BYTES) throw new Error('ZIP too large: total uncompressed size exceeds 200 MB.');
     seen.add(key);
+    totalBytes += realSize;
+    if (extracted.length + 1 > MAX_FILES) throw new Error(`ZIP has too many files (>${MAX_FILES}).`);
     const outPath = path.join(destFolder, safeName);
-    fs.writeFileSync(outPath, entry.getData());
+    fs.writeFileSync(outPath, data);
     extracted.push(safeName);
   }
   return extracted;
 }
 
 export async function protectPdf(inputPath, outputPath, password) {
+  // Pass arguments via a chmod-600 @argfile (qpdf reads one argument per line) so the
+  // NI-number password never appears in process arguments (visible via ps / /proc/PID/cmdline).
+  const argfile = path.join(os.tmpdir(), `qpdf-${randomBytes(12).toString('hex')}.args`);
+  const args = ['--encrypt', password, password, '256', '--', inputPath, outputPath].join('\n') + '\n';
+  fs.writeFileSync(argfile, args, { mode: 0o600 });
   try {
-    await execFileAsync('qpdf', [
-      '--encrypt', password, password, '256',
-      '--',
-      inputPath,
-      outputPath
-    ]);
+    await execFileAsync('qpdf', [`@${argfile}`]);
   } catch {
-    // Don't propagate qpdf's raw error — argv contains the password.
+    // Don't propagate qpdf's raw error — it may echo the argfile/inputs.
     // Remove any partial output file qpdf may have created before throwing.
     try { fs.unlinkSync(outputPath); } catch (e) { console.warn('[protectPdf] failed to remove partial output:', outputPath, e.message); }
     throw new Error('PDF protection failed (qpdf error).');
+  } finally {
+    try { fs.unlinkSync(argfile); } catch { /* ignore */ }
   }
 }
 
@@ -127,6 +153,7 @@ If no issues found: {"issues":[],"all_clear":true,"summary":"All assignments loo
         'anthropic-version': '2023-06-01',
         'content-type': 'application/json'
       },
+      signal: AbortSignal.timeout(60_000),
       body: JSON.stringify({
         model: 'claude-sonnet-4-6',
         max_tokens: 2048,
@@ -174,6 +201,7 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
   fs.mkdirSync(protectedDir, { recursive: true });
 
   let extractionDone = false;
+  const results = [];
   try {
     // 1. Parse recipients from Excel
     const recipients = parseExcel(xlsxBuffer);
@@ -194,7 +222,6 @@ export async function preparePayslips(xlsxBuffer, zipBuffer, apiKey) {
     const recipientMap = new Map(recipients.map((r) => [r.email.toLowerCase(), r]));
 
     // 4. Password-protect each matched PDF
-    const results = [];
     const protect_errors = [];
 
     for (const m of matched) {
@@ -246,13 +273,15 @@ export function listRuns() {
       const resultFile = path.join(runPath, 'results.json');
       let created = null;
       let recipient_count = 0;
+      let name = null;
       try {
         const stat = fs.statSync(resultFile);
         created = stat.mtime.toISOString();
         const data = JSON.parse(fs.readFileSync(resultFile, 'utf8'));
         recipient_count = data.results?.length || 0;
+        name = data.name || null;
       } catch { /* ignore */ }
-      return { run_id: d.name, created, recipient_count };
+      return { run_id: d.name, created, recipient_count, name };
     })
     .sort((a, b) => (b.created || '').localeCompare(a.created || ''));
 }
@@ -278,4 +307,42 @@ export function deleteAllRuns() {
     fs.rmSync(path.join(PAYSLIPS_DIR, d.name), { recursive: true, force: true });
   }
   return runs.length;
+}
+
+// ---- Retention ----
+
+// True when p resolves to a file inside PAYSLIPS_DIR (never touch shared campaign uploads).
+export function isPayslipPath(p) {
+  if (!p) return false;
+  return path.resolve(p).startsWith(path.resolve(PAYSLIPS_DIR) + path.sep);
+}
+
+// Delete a protected payslip once it has been sent. Returns true if a file was removed.
+export function deletePayslipFile(p) {
+  if (!isPayslipPath(p)) return false;
+  try { fs.unlinkSync(p); return true; } catch { return false; }
+}
+
+// Delete runs older than maxAgeDays. `isInUse(runDir)` lets the caller protect runs that
+// still have unsent recipients so a long-paused campaign doesn't lose its attachments.
+// Returns the number of runs deleted.
+export function purgeExpiredRuns(maxAgeDays, isInUse = () => false, now = Date.now()) {
+  if (!(maxAgeDays > 0) || !fs.existsSync(PAYSLIPS_DIR)) return 0;
+  const cutoff = now - maxAgeDays * 24 * 60 * 60 * 1000;
+  let deleted = 0;
+  for (const d of fs.readdirSync(PAYSLIPS_DIR, { withFileTypes: true })) {
+    if (!d.isDirectory()) continue;
+    const runPath = path.join(PAYSLIPS_DIR, d.name);
+    let mtime;
+    try {
+      mtime = fs.statSync(path.join(runPath, 'results.json')).mtimeMs;
+    } catch {
+      try { mtime = fs.statSync(runPath).mtimeMs; } catch { continue; }
+    }
+    if (mtime > cutoff) continue;
+    if (isInUse(runPath)) continue;
+    fs.rmSync(runPath, { recursive: true, force: true });
+    deleted++;
+  }
+  return deleted;
 }

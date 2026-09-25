@@ -1,7 +1,8 @@
 import db from './db.js';
 import { getSettings } from './settings.js';
 import { buildTransport, sendOne, fromHeaderFor } from './mailer.js';
-import { campaignStats, setStatus } from './campaigns.js';
+import { campaignStats, setStatus, hasPendingAttachment } from './campaigns.js';
+import { DELETE_AFTER_SEND, deletePayslipFile } from './preparePayslips.js';
 
 const TICK_MS = 2000;
 const MAX_ATTEMPTS = 3;
@@ -62,7 +63,7 @@ async function trySend(transport, campaign, recipient, fromHeader) {
       return { ok: true };
     } catch (err) {
       lastErr = err;
-      log(`send failed (attempt ${attempt}/${MAX_ATTEMPTS}) to ${recipient.email}: ${err.message}`);
+      log(`send failed (attempt ${attempt}/${MAX_ATTEMPTS}) to recipient ${recipient.id}: ${err.message}`);
       if (attempt < MAX_ATTEMPTS) await sleep(RETRY_BACKOFF_MS * attempt);
     }
   }
@@ -118,8 +119,13 @@ async function tick() {
         continue;
       }
       const result = await trySend(transport, campaign, recipient, fromHeader);
-      if (result.ok) markSentStmt.run(recipient.id);
-      else markFailedStmt.run(result.error, recipient.id);
+      if (result.ok) {
+        markSentStmt.run(recipient.id);
+        // Retention: a protected payslip is only needed until it's delivered.
+        if (DELETE_AFTER_SEND && recipient.attachment_path && !hasPendingAttachment(recipient.attachment_path)) {
+          deletePayslipFile(recipient.attachment_path);
+        }
+      } else markFailedStmt.run(result.error, recipient.id);
     }
 
     const fresh = currentStatusStmt.get(campaign.id);

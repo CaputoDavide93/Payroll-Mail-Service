@@ -113,7 +113,7 @@ async function loadPayslipRuns() {
       runs.forEach((r) => {
         const opt = document.createElement('option');
         opt.value = r.run_id;
-        opt.textContent = `${r.run_id} — ${r.total} payslips`;
+        opt.textContent = `${r.name || r.run_id} — ${r.recipient_count} payslip${r.recipient_count === 1 ? '' : 's'}`;
         sel.appendChild(opt);
       });
     }

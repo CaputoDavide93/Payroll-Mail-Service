@@ -31,20 +31,24 @@ resource "aws_security_group" "this" {
   name        = "payroll-mail-service-${var.environment}"
   description = "Payroll Mail Service - SSH + app HTTP"
 
+  # No SSH: use SSM Session Manager (aws ssm start-session --target <instance-id>).
+
+  # nginx on the instance terminates TLS (Let's Encrypt); port 80 only redirects.
+  # The app itself listens on 127.0.0.1:3000 and is never exposed.
   ingress {
-    description = "SSH"
-    from_port   = 22
-    to_port     = 22
+    description = "HTTPS from offices"
+    from_port   = 443
+    to_port     = 443
     protocol    = "tcp"
-    cidr_blocks = [var.ssh_cidr]
+    cidr_blocks = var.office_cidrs
   }
 
   ingress {
-    description = "App HTTP"
-    from_port   = 3000
-    to_port     = 3000
+    description = "HTTP from offices (redirects to HTTPS)"
+    from_port   = 80
+    to_port     = 80
     protocol    = "tcp"
-    cidr_blocks = [var.ssh_cidr]
+    cidr_blocks = var.office_cidrs
   }
 
   egress {
@@ -70,8 +74,9 @@ data "aws_ami" "al2023" {
   owners      = ["amazon"]
 
   filter {
-    name   = "name"
-    values = ["al2023-ami-*-x86_64"]
+    name = "name"
+    # Plain AL2023 only — the old "al2023-ami-*" pattern also matched the ECS/Neuron variants.
+    values = ["al2023-ami-2023.*-x86_64"]
   }
 
   filter {
@@ -103,15 +108,36 @@ resource "aws_instance" "this" {
     }
   }
 
+  metadata_options {
+    http_tokens   = "required" # IMDSv2 only (matches the live instance)
+    http_endpoint = "enabled"
+  }
+
   user_data = templatefile("${path.module}/user_data.sh.tpl", {
-    git_repo_url = var.git_repo_url
-    git_branch   = var.git_branch
-    secret_arn   = aws_secretsmanager_secret.app_config.arn
-    aws_region   = var.aws_region
-    environment  = var.environment
+    ecr_registry              = split("/", aws_ecr_repository.this.repository_url)[0]
+    ecr_repo_url              = aws_ecr_repository.this.repository_url
+    image_tag                 = var.image_tag
+    secret_arn                = aws_secretsmanager_secret.app_config.arn
+    aws_region                = var.aws_region
+    environment               = var.environment
+    smtp_host_allowlist       = var.smtp_host_allowlist
+    payslip_retention_days    = var.payslip_retention_days
+    payslip_delete_after_send = var.payslip_delete_after_send
+    domain_name               = var.domain_name
+    acme_email                = var.acme_email
+    nginx_image               = var.nginx_image
+    certbot_image             = var.certbot_image
   })
 
+  # A user_data change stops/starts the instance in place (data on the root volume is
+  # kept) but cloud-init won't re-run it: re-run it via SSM (see impl notes / deploy.sh).
   user_data_replace_on_change = false
+
+  lifecycle {
+    # The root volume holds the SQLite DB and payslip runs (delete_on_termination = true),
+    # so a newer AMI must never force a replacement. Rebuild deliberately instead.
+    ignore_changes = [ami]
+  }
 
   tags = {
     Name  = "payroll-mail-service"

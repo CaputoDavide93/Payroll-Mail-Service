@@ -56,6 +56,26 @@ function assertEmail(value, label) {
   if (v && !EMAIL_RE.test(v)) throw new Error(`${label} doesn't look like a valid email address.`);
 }
 
+// SMTP hosts the UI may point the service at. Without this, anyone with the shared UI
+// password could repoint smtp_host at their own server and have nodemailer hand it the
+// stored Workspace app password. Override with SMTP_HOST_ALLOWLIST (comma-separated);
+// '*' disables the check (e.g. local dev against another provider).
+const DEFAULT_SMTP_HOSTS = 'smtp.gmail.com,smtp-relay.gmail.com';
+
+export function allowedSmtpHosts() {
+  return (process.env.SMTP_HOST_ALLOWLIST || DEFAULT_SMTP_HOSTS)
+    .split(',').map((h) => h.trim().toLowerCase()).filter(Boolean);
+}
+
+export function assertSmtpHostAllowed(host) {
+  const allowed = allowedSmtpHosts();
+  if (allowed.includes('*')) return;
+  const h = String(host || '').trim().toLowerCase();
+  if (!allowed.includes(h)) {
+    throw new Error(`SMTP host "${h}" is not allowed. Allowed hosts: ${allowed.join(', ')}.`);
+  }
+}
+
 export function updateSettings(input) {
   const current = getSettings();
   const smtp_port = toInt(input.smtp_port, current.smtp_port);
@@ -77,8 +97,16 @@ export function updateSettings(input) {
   assertEmail(smtp_user, 'The Gmail/Workspace address');
   assertEmail(from_email, 'The From address');
 
+  const smtp_host = String(input.smtp_host ?? current.smtp_host).trim();
+  assertSmtpHostAllowed(smtp_host);
+  const newPass = input.smtp_pass === undefined || input.smtp_pass === null ? '' : String(input.smtp_pass).trim();
+  // Never carry the saved password over to a different server.
+  if (current.smtp_pass && !newPass && smtp_host.toLowerCase() !== String(current.smtp_host).trim().toLowerCase()) {
+    throw new Error('Re-enter the app password when changing the SMTP host.');
+  }
+
   const merged = {
-    smtp_host: input.smtp_host ?? current.smtp_host,
+    smtp_host,
     smtp_port,
     smtp_secure,
     smtp_user,

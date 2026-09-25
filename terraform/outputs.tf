@@ -4,8 +4,12 @@ output "public_ip" {
 }
 
 output "app_url" {
-  description = "URL to open in your browser"
-  value       = "http://${aws_eip.this.public_ip}:3000"
+  description = "URL to open in your browser (office IPs only)"
+  value       = "https://${var.domain_name}"
+}
+
+output "ecr_repository_url" {
+  value = aws_ecr_repository.this.repository_url
 }
 
 output "ssh_command" {

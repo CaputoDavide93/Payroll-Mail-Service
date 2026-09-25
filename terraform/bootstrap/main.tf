@@ -25,7 +25,8 @@ provider "aws" {
   region  = "eu-west-1"
   profile = "default"
 
-  allowed_account_ids = ["054904986477"]
+  # Optional guard against applying to the wrong account:
+  # allowed_account_ids = ["123456789012"]
 
   default_tags {
     tags = {
@@ -36,8 +37,10 @@ provider "aws" {
   }
 }
 
+data "aws_caller_identity" "current" {}
+
 resource "aws_s3_bucket" "tf_state" {
-  bucket = "payroll-mail-tf-state-054904986477"
+  bucket = "payroll-mail-tf-state-${data.aws_caller_identity.current.account_id}"
 
   lifecycle {
     prevent_destroy = true

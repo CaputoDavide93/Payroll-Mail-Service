@@ -339,7 +339,7 @@ async function loadRuns() {
     for (const r of runs) {
       const li = el('li');
       const fmt = r.created ? new Date(r.created).toLocaleString() : 'unknown date';
-      const info = el('span', null, `Run ${r.run_id} — ${r.recipient_count} payslip${r.recipient_count === 1 ? '' : 's'} — ${fmt}`);
+      const info = el('span', null, `${r.name || r.run_id} — ${r.recipient_count} payslip${r.recipient_count === 1 ? '' : 's'}`);
       const delBtn = el('button', 'btn small danger');
       delBtn.textContent = 'Delete';
       delBtn.addEventListener('click', async () => {

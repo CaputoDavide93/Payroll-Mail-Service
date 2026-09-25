@@ -4,3 +4,8 @@ data
 .git
 *.log
 npm-debug.log
+.gstack
+terraform
+test
+deploy.sh
+*.pem

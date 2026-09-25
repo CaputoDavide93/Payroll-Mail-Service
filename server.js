@@ -14,9 +14,12 @@ import {
   campaignStats, failedRecipients, deleteCampaign, requeueFailed, firstRecipient
 } from './src/campaigns.js';
 import { startWorker, stopWorker } from './src/worker.js';
-import { preparePayslips, preflightCheck, listRuns, deleteRun, deleteAllRuns, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { preflightCheck, listRuns, deleteRun, deleteAllRuns, purgeExpiredRuns, RETENTION_DAYS, PAYSLIPS_DIR } from './src/preparePayslips.js';
+import { hasPendingAttachmentUnder } from './src/campaigns.js';
 import { getAnthropicApiKey } from './src/settings.js';
 import XLSX from 'xlsx';
+import { Worker } from 'node:worker_threads';
+import { toSqlTime } from './src/time.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -25,6 +28,21 @@ const APP_PASSWORD = process.env.APP_PASSWORD || '';
 seedFromEnv();
 
 const app = express();
+app.disable('x-powered-by');
+
+// Behind nginx (one hop), set TRUST_PROXY=1 so req.ip is the real client (the per-IP login
+// throttle would otherwise lock out everyone at once) and req.secure reflects HTTPS.
+if (process.env.TRUST_PROXY) {
+  const hops = Number(process.env.TRUST_PROXY);
+  app.set('trust proxy', Number.isFinite(hops) ? hops : process.env.TRUST_PROXY);
+}
+
+// HSTS only when the request actually arrived over HTTPS (never on plain local http).
+app.use((req, res, next) => {
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
+  next();
+});
+
 app.use(express.json());
 
 const upload = multer({
@@ -53,13 +71,16 @@ function passwordMatches(supplied) {
 }
 
 // Lightweight per-IP throttle to blunt brute-force attempts.
-const failedAttempts = new Map(); // ip -> { count, until }
+const failedAttempts = new Map(); // ip -> { count, until, last }
+const FAILED_TTL_MS = 10 * 60 * 1000;
 
 // Sweep entries whose lockout window has expired so the map doesn't grow forever.
 function sweepFailedAttempts() {
   const now = Date.now();
   for (const [ip, rec] of failedAttempts) {
-    if (rec.until > 0 && rec.until <= now) failedAttempts.delete(ip);
+    if ((rec.until > 0 && rec.until <= now) || (rec.last && rec.last + FAILED_TTL_MS <= now)) {
+      failedAttempts.delete(ip);
+    }
   }
 }
 setInterval(sweepFailedAttempts, 5 * 60 * 1000).unref();
@@ -74,11 +95,11 @@ app.use('/api', (req, res, next) => {
   if (passwordMatches(req.get('x-app-password'))) {
     // Clear the lockout window but keep the count so the IP doesn't reset its budget
     const existing = failedAttempts.get(ip);
-    if (existing) failedAttempts.set(ip, { count: existing.count, until: 0 });
+    if (existing) failedAttempts.set(ip, { count: existing.count, until: 0, last: Date.now() });
     return next();
   }
   const count = (rec?.count || 0) + 1;
-  failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0 });
+  failedAttempts.set(ip, { count, until: count >= 5 ? Date.now() + 60_000 : 0, last: Date.now() });
   res.status(401).json({ error: 'Unauthorized' });
 });
 
@@ -127,7 +148,12 @@ app.post('/api/campaigns', upload.fields([
   if (!b.subject?.trim()) throw new Error('Please enter a subject line.');
   if (!b.body?.trim()) throw new Error('Please write the email body.');
 
-  const scheduled = b.scheduled_start?.trim() ? toSqlTime(b.scheduled_start) : null;
+  const offset = (() => {
+    const raw = b.scheduled_timezone_offset_minutes ?? b.scheduled_tz_offset ?? req.get('x-timezone-offset');
+    const n = Number(raw);
+    return Number.isFinite(n) ? n : null;
+  })();
+  const scheduled = b.scheduled_start?.trim() ? toSqlTime(b.scheduled_start, offset) : null;
   const asDraft = b.as_draft === 'true' || b.as_draft === true;
   const status = asDraft ? 'draft' : (scheduled ? 'scheduled' : 'running');
   const base = {
@@ -142,6 +168,7 @@ app.post('/api/campaigns', upload.fields([
   if (b.run_id) {
     const outcome = loadRunResults(b.run_id);
     if (!outcome.results?.length) throw new Error('No prepared payslips found in that run.');
+    assertRunFilesPresent(outcome);
     const recipients = outcome.results.map((r) => ({
       email: r.email, name: r.name,
       attachment_path: r.protected_path,
@@ -241,14 +268,6 @@ app.delete('/api/campaigns/:id', wrap((req, res) => {
   res.json({ ok: true });
 }));
 
-// Convert an <input type="datetime-local"> value to "YYYY-MM-DD HH:MM:SS" (UTC for SQLite).
-// Throws on invalid input so callers get a clear error instead of a silent null→running campaign.
-function toSqlTime(local) {
-  const d = new Date(local);
-  if (Number.isNaN(d.getTime())) throw new Error(`Invalid scheduled start date: "${local}".`);
-  return d.toISOString().replace('T', ' ').slice(0, 19);
-}
-
 // Parse an integer field, keeping a deliberate 0 (unlike `Number(x) || default`).
 function intField(value, fallback) {
   if (value === undefined || value === null || value === '') return fallback;
@@ -290,6 +309,45 @@ function loadRunResults(run_id) {
   }
 }
 
+// Protected PDFs are deleted after sending / after the retention window, so a run can
+// outlive its files. Refuse to build a campaign that would fail on every recipient.
+function assertRunFilesPresent(outcome) {
+  const missing = outcome.results.filter((r) => !r.protected_path || !fs.existsSync(r.protected_path)).length;
+  if (missing > 0) {
+    throw new Error(`${missing} of ${outcome.results.length} payslip files in this run have already been sent or expired and were deleted. Upload the files again to prepare a new run.`);
+  }
+}
+
+// Run the heavy payslip preparation pipeline off the main thread so long jobs don't block
+// the event loop. Returns the pipeline outcome or throws if the worker fails.
+function runPayslipJob(excelBuffer, zipBuffer, apiKey) {
+  return new Promise((resolve, reject) => {
+    const worker = new Worker(new URL('./src/payslipJobWorker.js', import.meta.url), {
+      workerData: { excel: excelBuffer, zip: zipBuffer, apiKey }
+    });
+
+    const timeout = setTimeout(() => {
+      worker.terminate().catch(() => {});
+      reject(new Error('Payslip preparation timed out. Please try a smaller batch.'));
+    }, 120_000); // 2 minutes
+
+    worker.once('message', (msg) => {
+      clearTimeout(timeout);
+      if (msg?.ok) return resolve(msg.result);
+      reject(new Error(msg?.error || 'Payslip preparation failed.'));
+    });
+
+    worker.once('error', (err) => {
+      clearTimeout(timeout);
+      reject(err);
+    });
+
+    worker.once('exit', (code) => {
+      if (code !== 0) reject(new Error('Payslip preparation worker exited unexpectedly.'));
+    });
+  });
+}
+
 // Step 1: Upload Excel + ZIP, run AI-match + protect pipeline.
 app.post('/api/payslips/prepare', payslipsUpload.fields([
   { name: 'excel', maxCount: 1 },
@@ -301,11 +359,12 @@ app.post('/api/payslips/prepare', payslipsUpload.fields([
   if (!zipFile) throw new Error('Please upload the ZIP file (PDFs).');
 
   const apiKey = getAnthropicApiKey();
-  const outcome = await preparePayslips(excelFile.buffer, zipFile.buffer, apiKey);
+  const outcome = await runPayslipJob(excelFile.buffer, zipFile.buffer, apiKey);
 
   // Persist results — NI numbers are NOT in outcome.results (stripped in preparePayslips)
   const resultFile = path.join(PAYSLIPS_DIR, outcome.run_id, 'results.json');
-  fs.writeFileSync(resultFile, JSON.stringify(outcome));
+  const runName = new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  fs.writeFileSync(resultFile, JSON.stringify({ ...outcome, name: runName }));
 
   res.json({
     run_id: outcome.run_id,
@@ -337,6 +396,7 @@ app.post('/api/payslips/send', wrap((req, res) => {
 
   const outcome = loadRunResults(run_id);
   if (!outcome.results?.length) throw new Error('No successfully prepared payslips in this run.');
+  assertRunFilesPresent(outcome);
 
   const recipients = outcome.results.map((r) => ({
     email: r.email,
@@ -399,7 +459,19 @@ const server = app.listen(PORT, () => {
   if (APP_PASSWORD) console.log('Password protection is ENABLED.')
   else console.warn('WARNING: APP_PASSWORD is not set — the API is unprotected. Set APP_PASSWORD in production.')
   startWorker();
+  purgeRuns();
 });
+
+// Retention: drop payslip runs older than PAYSLIP_RETENTION_DAYS (unless still being sent).
+function purgeRuns() {
+  try {
+    const n = purgeExpiredRuns(RETENTION_DAYS, hasPendingAttachmentUnder);
+    if (n > 0) console.log(`Retention: deleted ${n} payslip run(s) older than ${RETENTION_DAYS} day(s).`);
+  } catch (err) {
+    console.error('Retention purge failed:', err.message);
+  }
+}
+setInterval(purgeRuns, 60 * 60 * 1000).unref();
 
 // Finish any in-flight batch before exiting so a shutdown doesn't interrupt a send.
 for (const signal of ['SIGTERM', 'SIGINT']) {

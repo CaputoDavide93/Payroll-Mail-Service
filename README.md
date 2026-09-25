@@ -4,13 +4,14 @@
 
 **Send personalised, password-protected payslips to your whole team — safely, in batches, from a single page**
 
-![Node.js](https://img.shields.io/badge/Node.js-5FA04E?logo=nodedotjs&logoColor=white)
+![Node.js](https://img.shields.io/badge/Node.js-22-5FA04E?logo=nodedotjs&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-000000?logo=express&logoColor=white)
 ![SQLite](https://img.shields.io/badge/SQLite-003B57?logo=sqlite&logoColor=white)
 ![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Terraform](https://img.shields.io/badge/Terraform-AWS-7B42BC?logo=terraform&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/License-MIT-yellow)
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Payslips](#-personalised-payslip-sender) • [Configuration](#️-configuration) • [How It Works](#-how-it-works) • [Troubleshooting](#-troubleshooting)
+[Features](#-features) • [Quick Start](#-quick-start) • [Payslips](#-personalised-payslip-sender) • [Configuration](#️-configuration) • [AWS Deploy](#️-deploying-to-aws-terraform) • [How It Works](#-how-it-works) • [Troubleshooting](#-troubleshooting)
 
 </div>
 
@@ -30,6 +31,10 @@
 | 📊 **Live Dashboard** | Sent / pending / failed counts, progress bar, pause / resume / stop / retry |
 | 🔒 **UI Password** | Optional `APP_PASSWORD` locks the web UI for cloud deployments |
 | 📋 **Payslip Sender** | AI-matched, NI-password-protected, per-recipient PDF payslips |
+| 🗑️ **Payslip Retention** | Protected PDFs deleted as soon as they're sent; whole runs purged after N days |
+| 🛡️ **SMTP Host Allowlist** | The UI can only point at approved SMTP hosts; changing host requires re-entering the password |
+| 🌍 **Timezone-Correct Scheduling** | Scheduled starts use the browser's timezone, not the server's |
+| ☁️ **AWS Deploy** | Terraform: one EC2 instance, nginx + Let's Encrypt TLS, image pulled from ECR, rollback on failed health check |
 
 ---
 
@@ -38,7 +43,8 @@
 | Requirement | Version |
 |-------------|---------|
 | Docker | 20+ (recommended) |
-| Node.js | 20+ (without Docker) |
+| Node.js | 22+ (without Docker) |
+| qpdf | Only without Docker — needed for payslip encryption |
 | Gmail / Workspace | App Password required |
 
 ### Gmail Sending Limits
@@ -81,9 +87,15 @@ To stop: `docker compose down` — your data survives in the `mail-data` Docker 
 ### Run Without Docker
 
 ```bash
-npm install
+npm ci
 npm start
 # open http://localhost:3000
+```
+
+### Run the Tests
+
+```bash
+npm test          # node --test (needs qpdf on PATH for the payslip tests)
 ```
 
 ---
@@ -139,7 +151,7 @@ A dedicated workflow for sending each employee their own password-protected PDF 
 | **3. Protect** | Each PDF is encrypted with the employee's NI number as the password (256-bit AES via `qpdf`) |
 | **4. Pre-flight** | Optional AI review flags suspicious pairings before a single email is sent |
 | **5. Send** | A per-recipient campaign is created — each person gets only their own payslip |
-| **6. Cleanup** | Delete all PDFs and match data from the server when done |
+| **6. Cleanup** | Each protected PDF is deleted once sent; runs expire after `PAYSLIP_RETENTION_DAYS` (or delete them manually) |
 
 ### Excel Format
 
@@ -154,6 +166,10 @@ A dedicated workflow for sending each employee their own password-protected PDF 
 
 - NI numbers are **never** stored, logged, or returned by any API — used only at the moment of PDF encryption
 - Raw (unprotected) PDFs are deleted from disk as soon as protection completes
+- The NI-number password is passed to `qpdf` through a private argfile, never on the command line
+- ZIP uploads are capped (500 files, 25 MB per PDF, 200 MB total) to stop ZIP bombs
+- Preparation runs in a worker thread with a 2-minute timeout, so a large upload can't freeze the UI
+- Recipient email addresses are not written to the send logs
 - The Anthropic API key can be provided via `ANTHROPIC_API_KEY` or in Settings — stored locally, never echoed back to the UI
 - Full data-handling policy and vulnerability reporting: [SECURITY.md](SECURITY.md)
 
@@ -170,6 +186,7 @@ Set in **⚙️ Settings** in the UI, or seed via environment variables. Copy `.
 | Variable | Purpose | Default |
 |----------|---------|---------|
 | `SMTP_HOST` | Mail server hostname | `smtp.gmail.com` |
+| `SMTP_HOST_ALLOWLIST` | SMTP hosts the UI may use (comma-separated; `*` = any, local dev only) | `smtp.gmail.com,smtp-relay.gmail.com` |
 | `SMTP_PORT` | `465` (SSL) or `587` (STARTTLS) | `465` |
 | `SMTP_USER` | Gmail / Workspace login address | – |
 | `SMTP_PASS` | App Password | – |
@@ -178,6 +195,9 @@ Set in **⚙️ Settings** in the UI, or seed via environment variables. Copy `.
 | `DAILY_LIMIT` | Max emails per rolling 24 h | `1800` |
 | `APP_PASSWORD` | Locks the web UI (recommended on cloud) | – (off) |
 | `ANTHROPIC_API_KEY` | Enables AI matching + pre-flight check for payslips | – (off) |
+| `PAYSLIP_DELETE_AFTER_SEND` | Delete each protected PDF once it has been sent | `true` |
+| `PAYSLIP_RETENTION_DAYS` | Delete whole payslip runs this many days after preparation (`0` = never; runs still sending are kept) | `7` |
+| `TRUST_PROXY` | Set to `1` behind one reverse proxy so login throttling sees real client IPs and HSTS is sent over HTTPS | – (off) |
 | `PORT` | Port to serve on | `3000` |
 | `DATA_DIR` | Database + uploads location | `data` (`/data` in Docker) |
 
@@ -212,9 +232,50 @@ ssh -L 3000:localhost:3000 user@<server-ip>
 # open http://localhost:3000 on your laptop
 ```
 
-For team access, put Caddy or Nginx in front on port 443 for automatic HTTPS.
+For team access, put Caddy or Nginx in front on port 443 for automatic HTTPS, and set `TRUST_PROXY=1`.
 
 > **Security:** Always set `APP_PASSWORD` on any internet-facing server — without it the API is fully open.
+
+---
+
+## ☁️ Deploying to AWS (Terraform)
+
+`terraform/` builds a small, locked-down home for the app: one EC2 instance with an Elastic IP, reachable only from your office CIDRs, with TLS terminated on the box.
+
+```mermaid
+flowchart LR
+    Dev["👩‍💻 ./deploy.sh"] -->|"docker buildx push<br/>:latest, :base, :git-sha"| ECR["📦 ECR"]
+    Dev -->|"SSM Run Command<br/>payroll-update git-sha"| EC2
+    User["👤 Office browser"] -->|"HTTPS (office CIDRs only)"| DNS["🌐 Route53<br/>domain_name"]
+    DNS --> EC2
+    subgraph EC2["🖥️ EC2 (Amazon Linux 2023)"]
+        NGX["🔒 nginx<br/>Let's Encrypt TLS"] --> APP["💸 app container<br/>:3000 loopback"]
+        APP --> VOL[("🗄️ /data volume<br/>SQLite + payslips")]
+    end
+    ECR -->|"pull"| APP
+    SM["🔐 Secrets Manager"] -.->|"boot: write .env"| APP
+    NGX -.->|"DNS-01 via Route53"| LE["🔏 Let's Encrypt"]
+```
+
+| Piece | What it does |
+|-------|--------------|
+| `terraform/bootstrap/` | One-off S3 bucket + DynamoDB table for Terraform state (named after your account ID) |
+| `terraform/ec2.tf` | Instance, security group (443/80 from `office_cidrs` only — no SSH, use SSM Session Manager), Elastic IP |
+| `terraform/ecr.tf` | ECR repo with scan-on-push; keeps `:latest`/`:base`, expires untagged images after 7 days |
+| `terraform/dns.tf` | A record for `domain_name` in `hosted_zone` pointing at the Elastic IP |
+| `terraform/secrets.tf` | App secret in Secrets Manager (Terraform never overwrites live values), IAM for ECR pull, SSM and the ACME TXT record |
+| `terraform/user_data.sh.tpl` | Boot script: waits for secrets, writes `.env`, starts app + nginx, installs `payroll-cert` (issue/renew, twice daily) and `payroll-update` (pull a tag, health-check, auto-rollback) |
+| `deploy.sh` | Builds and pushes the image, then rolls the instance to the new git SHA over SSM (`./deploy.sh --roll <tag>` to roll back) |
+
+```bash
+cd terraform/bootstrap && terraform init && terraform apply && cd ..
+# set the state bucket in main.tf (or: terraform init -backend-config="bucket=...")
+cp terraform.tfvars.example terraform.tfvars   # office_cidrs, hosted_zone, domain_name
+terraform init && terraform apply
+../deploy.sh                                   # build, push to ECR, roll the instance
+```
+
+Fill in the secret in Secrets Manager after the first apply — the instance waits at boot until real values are present. The instance is built to be **stopped between pay runs**: start it, wait ~2 minutes (the certificate is renewed on boot if due), send, then stop it. Don't stop or redeploy while a campaign is sending — the worker finishes its in-flight batch on shutdown and pending recipients resume on the next start.
 
 ---
 
@@ -238,7 +299,8 @@ Sending hundreds of near-identical emails is exactly what spam filters watch for
 - **State:** Single SQLite file (`better-sqlite3`) under `DATA_DIR` holds settings, campaigns, and every recipient's status — what makes crash-safe resume possible.
 - **Worker:** Background loop wakes every 2 s, promotes scheduled campaigns, sends the next batch (respecting the pause and daily cap), retries each failed send up to 3 times, and marks the campaign *completed* when the queue is empty.
 - **Atomic claim:** Before sending a batch, recipients are marked `sending` in a single transaction — a crash can't cause double-sends; the startup hook resets `sending → pending`.
-- **Payslips:** AI + fuzzy name matching, `qpdf` 256-bit AES encryption, raw PDFs deleted immediately after protection, NI numbers never persisted.
+- **Payslips:** AI + fuzzy name matching (30 s timeout), `qpdf` 256-bit AES encryption in a worker thread, raw PDFs deleted immediately after protection, protected PDFs deleted after send, NI numbers never persisted.
+- **Image:** Multi-stage Node 22 (Debian trixie) build from the lockfile, runs as the unprivileged `node` user.
 - **Frontend:** Static HTML/CSS/JS — no build step.
 
 ---
@@ -255,7 +317,12 @@ src/campaigns.js          Campaign / recipient queries
 src/worker.js             Background batch-sending loop
 src/preparePayslips.js    Payslip pipeline (match → protect → manage)
 src/matchAttachments.js   AI + fuzzy PDF-to-employee matching
+src/payslipJobWorker.js   Worker thread running the payslip pipeline
+src/time.js               Timezone-aware schedule parsing
 public/                   Web UI (campaigns + payslips pages)
+test/                     node --test suite
+terraform/                AWS deployment (EC2, ECR, Route53, Secrets Manager)
+deploy.sh                 Build, push to ECR, roll the instance via SSM
 Dockerfile
 docker-compose.yml
 .env.example
@@ -267,6 +334,7 @@ docker-compose.yml
 
 - **Delivery is "at least once."** A recipient is marked *sent* only after the mail server accepts it. If the process is killed in the tiny window between acceptance and the DB write, that one recipient may get the email twice on restart. For payroll, a duplicate is far less harmful than a missed payslip.
 - **App Password stored in SQLite** under `DATA_DIR`. Treat that volume as a secret and rotate the password in your Google account if it's ever exposed.
+- **Changing the SMTP host** in Settings requires re-entering the app password, and only hosts on `SMTP_HOST_ALLOWLIST` are accepted.
 - **Five wrong UI-password attempts** from one IP triggers a one-minute lockout.
 - **One attachment per standard campaign**, up to 25 MB. Payslips use per-recipient attachments with no size limit beyond disk space.
 - **Daily limit is a rolling 24-hour window**, not a calendar day.
@@ -305,6 +373,18 @@ brew install qpdf
 <summary>❌ No AI matching — payslips only use fuzzy match</summary>
 
 Set the `ANTHROPIC_API_KEY` environment variable in your `.env` file and rebuild the container, or paste the key in **Settings** (it's stored locally and never echoed back).
+</details>
+
+<details>
+<summary>❌ "SMTP host … is not allowed"</summary>
+
+The host isn't on `SMTP_HOST_ALLOWLIST`. Add it (comma-separated) to your `.env` and restart the container.
+</details>
+
+<details>
+<summary>❌ "payslip files in this run have already been sent or expired"</summary>
+
+Protected PDFs are deleted after sending and runs expire after `PAYSLIP_RETENTION_DAYS`. Upload the Excel and ZIP again to prepare a fresh run.
 </details>
 
 <details>

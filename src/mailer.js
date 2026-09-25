@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import path from 'node:path';
 import fs from 'node:fs';
-import { getSettings } from './settings.js';
+import { getSettings, assertSmtpHostAllowed } from './settings.js';
 
 // Build a fresh transporter from the current settings. Cheap enough to do per batch,
 // and means settings changes take effect without a restart.
@@ -10,6 +10,8 @@ export function buildTransport() {
   if (!s.smtp_host || !s.smtp_user || !s.smtp_pass) {
     throw new Error('SMTP is not configured yet. Open Settings and add the Gmail/Workspace details.');
   }
+  // Re-check at send time too, in case the DB was written before the allowlist existed.
+  assertSmtpHostAllowed(s.smtp_host);
   return nodemailer.createTransport({
     host: s.smtp_host,
     port: s.smtp_port,
