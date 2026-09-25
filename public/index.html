@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Payroll Mail Service</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">✉️</span>
+      <div>
+        <h1>Payroll Mail Service</h1>
+        <p class="tagline">Send a personalized email with an attachment to your whole list — safely, in batches.</p>
+      </div>
+    </div>
+    <div class="row">
+      <a href="/payslips.html" class="btn ghost">📋 Payslips</a>
+      <button id="howtoBtn" class="btn ghost">❓ How to</button>
+      <button id="settingsBtn" class="btn ghost">⚙️ Settings</button>
+    </div>
+  </header>
+
+  <!-- How to -->
+  <dialog id="howtoDialog">
+    <div class="card howto-card">
+      <div class="row between" style="margin-bottom:1rem">
+        <h2 style="font-size:1.15rem;margin:0">How to use Payroll Mail Service</h2>
+        <button type="button" class="btn ghost small" id="howtoClose">✕</button>
+      </div>
+
+      <div class="howto-steps">
+
+        <div class="howto-step">
+          <div class="howto-num">1</div>
+          <div>
+            <div class="howto-title">Set up your Gmail account</div>
+            <p class="howto-body">Click <b>⚙️ Settings</b> in the top-right corner. You need a <b>Gmail App Password</b> — not your normal password.</p>
+            <ol class="howto-list">
+              <li>Go to <b>myaccount.google.com</b> → Security → 2-Step Verification (must be on)</li>
+              <li>Search for <b>"App passwords"</b> → create one named "Payroll Mail"</li>
+              <li>Copy the 16-character code and paste it into the <b>App Password</b> field</li>
+              <li>Fill in your Gmail address and click <b>Save settings</b></li>
+              <li>Use <b>Send test</b> to verify everything works before your first real send</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">2</div>
+          <div>
+            <div class="howto-title">Prepare your recipients CSV</div>
+            <p class="howto-body">Create a spreadsheet (Excel or Google Sheets) and export it as <b>.csv</b>. It must have:</p>
+            <ul class="howto-list">
+              <li><code>email</code> column — recipient's email address <span class="req">required</span></li>
+              <li><code>name</code> column — used in the greeting (e.g. "Hi Sarah,") <span class="howto-rec">recommended</span></li>
+              <li>Any extra columns (e.g. <code>department</code>, <code>salary</code>) can be used as placeholders too</li>
+            </ul>
+            <div class="howto-example">email, name, department<br/>sarah@example.com, Sarah, Finance<br/>john@example.com, John, Engineering</div>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">3</div>
+          <div>
+            <div class="howto-title">Create a send</div>
+            <p class="howto-body">Fill in the <b>New send</b> form at the top of the page:</p>
+            <ul class="howto-list">
+              <li><b>Campaign name</b> — for your reference only (e.g. "June payslips")</li>
+              <li><b>Subject</b> — use <code>{name}</code> to personalise (e.g. "Your June payslip, {name}")</li>
+              <li><b>Email body</b> — write your message; use <code>{name}</code> or any CSV column name in curly braces</li>
+              <li><b>Recipients CSV</b> — upload the file you prepared in step 2</li>
+              <li><b>Attachment</b> — upload the PDF (or other file) to send to everyone</li>
+              <li><b>Batch size</b> — how many emails to send at once (10 is safe for Gmail)</li>
+              <li><b>Seconds between batches</b> — pause between groups (60s keeps Gmail happy)</li>
+            </ul>
+            <p class="howto-body">Click <b>Create &amp; send</b>. You can close this browser tab — sending continues on the server.</p>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">4</div>
+          <div>
+            <div class="howto-title">Monitor progress</div>
+            <p class="howto-body">Scroll down to the <b>Sends</b> section. Each send shows a progress bar and counts for sent / pending / failed. The page auto-refreshes every few seconds.</p>
+            <ul class="howto-list">
+              <li><b>Pause</b> — temporarily stop sending (resumes from where it left off)</li>
+              <li><b>Resume</b> — continue a paused send</li>
+              <li><b>Stop</b> — cancel the send permanently (remaining recipients won't receive anything)</li>
+              <li><b>Retry failed</b> — re-queue any recipients that failed (e.g. bad address)</li>
+              <li><b>Send preview</b> — send yourself a real copy of the email before the full blast</li>
+            </ul>
+          </div>
+        </div>
+
+        <div class="howto-step">
+          <div class="howto-num">5</div>
+          <div>
+            <div class="howto-title">Tips &amp; limits</div>
+            <ul class="howto-list">
+              <li>Free Gmail accounts: ~<b>500 emails/day</b>. Google Workspace: ~<b>2 000/day</b></li>
+              <li>The daily limit resets on a rolling 24-hour basis, not at midnight</li>
+              <li>If sending stops unexpectedly, restart the server — it will pick up exactly where it left off with no duplicates</li>
+              <li>Attachments are shared: the <b>same file</b> goes to every recipient</li>
+              <li>Use the <b>Schedule start</b> field to send overnight or at the weekend</li>
+            </ul>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </dialog>
+
+  <!-- Login (only shown when password protection is on) -->
+  <dialog id="loginDialog">
+    <form method="dialog" id="loginForm" class="card">
+      <h2>Enter password</h2>
+      <p class="muted">This service is password protected.</p>
+      <input type="password" id="loginPassword" placeholder="Password" autocomplete="current-password" />
+      <div class="row end"><button class="btn primary" id="loginSubmit">Unlock</button></div>
+      <p class="error" id="loginError"></p>
+    </form>
+  </dialog>
+
+  <!-- Settings -->
+  <dialog id="settingsDialog">
+    <form id="settingsForm" class="card wide">
+      <div class="row between">
+        <h2>Gmail / Workspace settings</h2>
+        <button type="button" class="btn ghost small" id="settingsClose">✕</button>
+      </div>
+      <p class="muted">One-time setup. Uses an <b>App Password</b> — see the README for the 2-minute steps.</p>
+
+      <label>SMTP host
+        <input name="smtp_host" value="smtp.gmail.com" />
+      </label>
+      <div class="grid2">
+        <label>Port
+          <select name="smtp_port" id="smtpPort">
+            <option value="465">465 (SSL)</option>
+            <option value="587">587 (STARTTLS)</option>
+          </select>
+        </label>
+        <label>Daily send limit
+          <input name="daily_limit" type="number" min="1" value="1800" />
+        </label>
+      </div>
+      <label>Gmail / Workspace address (login)
+        <input name="smtp_user" placeholder="you@example.com" autocomplete="username" />
+      </label>
+      <label>App Password
+        <input name="smtp_pass" type="password" placeholder="16-character app password" autocomplete="off" />
+        <span class="hint" id="passHint"></span>
+      </label>
+      <div class="grid2">
+        <label>From name (shown to recipients)
+          <input name="from_name" placeholder="Payroll Team" />
+        </label>
+        <label>From address
+          <input name="from_email" placeholder="payroll@example.com" />
+        </label>
+      </div>
+
+      <div class="row between wrap">
+        <div class="row">
+          <input type="email" id="testTo" placeholder="Send test email to…" />
+          <button type="button" class="btn" id="testBtn">Send test</button>
+        </div>
+        <button type="submit" class="btn primary">Save settings</button>
+      </div>
+      <p class="status" id="settingsStatus"></p>
+    </form>
+  </dialog>
+
+  <main class="container">
+    <!-- New campaign -->
+    <section class="card">
+      <h2>New send</h2>
+      <form id="campaignForm">
+        <label>Campaign name <span class="req">*</span>
+          <input name="name" placeholder="June payslips" required />
+        </label>
+
+        <div class="grid2">
+          <label>From name
+            <input name="from_name" placeholder="(defaults to Settings)" />
+          </label>
+          <label>From address
+            <input name="from_email" placeholder="(defaults to Settings)" />
+          </label>
+        </div>
+
+        <label>Subject <span class="req">*</span>
+          <input name="subject" placeholder="Your June payslip, {name}" required />
+        </label>
+
+        <label>Email body <span class="req">*</span>
+          <textarea name="body" rows="9" required placeholder="Hi {name},
+
+Please find your payslip attached.
+
+Best regards,
+The Payroll Team"></textarea>
+        </label>
+        <p class="hint">Use <code>{name}</code> to insert each person's name. Any other CSV column works too, e.g. <code>{department}</code>.</p>
+
+        <!-- Attachment type toggle -->
+        <div style="display:flex;gap:1.5rem;margin-bottom:.75rem;align-items:center">
+          <span style="font-size:.9rem;font-weight:500">Attachment:</span>
+          <label class="radio-label">
+            <input type="radio" name="attachType" value="file" id="attachTypeFile" checked> Upload file
+          </label>
+          <label class="radio-label">
+            <input type="radio" name="attachType" value="payslips" id="attachTypePayslips"> Protected payslips
+          </label>
+        </div>
+
+        <!-- Normal mode: CSV + file upload -->
+        <div class="grid2" id="normalAttachRow">
+          <label>Recipients (CSV) <span class="req">*</span>
+            <input type="file" name="recipients" id="recipientsFile" accept=".csv,text/csv" required />
+            <span class="hint" id="recipientsHint">Needs an <code>email</code> column; a <code>name</code> column is recommended.</span>
+          </label>
+          <label>Attachment (PDF, etc.)
+            <input type="file" name="attachment" id="attachmentFile" />
+            <span class="hint" id="attachmentHint">Max 25 MB. The same file goes to everyone.</span>
+          </label>
+        </div>
+
+        <!-- Payslips mode: run selector -->
+        <div id="payslipsAttachRow" style="display:none">
+          <label>Prepared payslips run
+            <select id="payslipRunSelect" style="width:100%;padding:.4rem .6rem;border:1px solid var(--border);border-radius:6px;font-size:.9rem;margin-top:.25rem">
+              <option value="">— select a prepared run —</option>
+            </select>
+            <span class="hint">Recipients and their password-protected PDFs are taken from the selected run. No CSV needed.</span>
+          </label>
+        </div>
+
+        <div class="grid3">
+          <label>Batch size
+            <input name="batch_size" type="number" min="1" value="10" />
+          </label>
+          <label>Seconds between batches
+            <input name="batch_interval_seconds" type="number" min="0" value="60" />
+          </label>
+          <label>Schedule start (optional)
+            <input name="scheduled_start" type="datetime-local" id="scheduledStart" />
+          </label>
+        </div>
+        <p class="hint">Leave the schedule blank to start sending immediately. Sending runs on the server — you can close this page.</p>
+
+        <div class="row between wrap">
+          <label class="checkbox"><input type="checkbox" id="asDraft" /> Create without sending (draft)</label>
+          <button type="submit" class="btn primary" id="createBtn">Create &amp; send</button>
+        </div>
+        <p class="status" id="campaignStatus"></p>
+      </form>
+    </section>
+
+    <!-- Campaign list -->
+    <section class="card">
+      <div class="row between">
+        <h2>Sends</h2>
+        <button class="btn ghost small" id="refreshBtn">↻ Refresh</button>
+      </div>
+      <div id="campaignList" class="campaign-list"><p class="muted">Loading…</p></div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
