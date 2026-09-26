@@ -119,7 +119,7 @@ npm start
 Set in **⚙️ Settings** in the UI, or seed via environment variables. Copy `.env.example` to `.env`: Docker Compose substitutes it into the `environment:` block of [`docker-compose.yml`](docker-compose.yml). `npm start` does not read `.env`, so export the variables in your shell instead.
 
 > [!NOTE]
-> The local `docker-compose.yml` passes only `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `FROM_EMAIL`, `FROM_NAME`, `DAILY_LIMIT` and `APP_PASSWORD` into the container. To use any other variable below in Docker, add it to that `environment:` block. The Anthropic API key can always be pasted in **⚙️ Settings** instead.
+> The local `docker-compose.yml` passes every variable below into the container except `DATA_DIR`, which Docker pins to `/data` (the `mail-data` volume). Changing `PORT` also changes the host port Compose publishes. On AWS, the secret's values (including `ANTHROPIC_API_KEY`) reach the container through the `.env` that `user_data` writes. The Anthropic API key can also be pasted in **⚙️ Settings**.
 
 | Variable | Purpose | Default |
 |----------|---------|---------|
@@ -389,13 +389,13 @@ brew install qpdf
 <details>
 <summary>❌ No AI matching — payslips only use fuzzy match</summary>
 
-Paste the key in **⚙️ Settings** (it's stored locally and never echoed back). An `ANTHROPIC_API_KEY` environment variable also works with `npm start`; in Docker it only reaches the container if you add it to the `environment:` block of the compose file.
+Paste the key in **⚙️ Settings** (it's stored locally and never echoed back). Setting `ANTHROPIC_API_KEY` also works: exported in your shell for `npm start`, in `.env` for Docker Compose, or in the Secrets Manager secret on AWS.
 </details>
 
 <details>
 <summary>❌ "SMTP host … is not allowed"</summary>
 
-The host isn't on `SMTP_HOST_ALLOWLIST`. Add it (comma-separated) to `SMTP_HOST_ALLOWLIST`: exported in your shell for `npm start`, in the `environment:` block of `docker-compose.yml` for local Docker, or as `smtp_host_allowlist` in `terraform.tfvars` on AWS. Then restart.
+The host isn't on `SMTP_HOST_ALLOWLIST`. Add it (comma-separated) to `SMTP_HOST_ALLOWLIST`: exported in your shell for `npm start`, in `.env` for local Docker, or as `smtp_host_allowlist` in `terraform.tfvars` on AWS. Then restart.
 </details>
 
 <details>

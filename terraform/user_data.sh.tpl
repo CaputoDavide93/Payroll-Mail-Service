@@ -126,6 +126,7 @@ services:
       - FROM_NAME=$${FROM_NAME:-}
       - DAILY_LIMIT=$${DAILY_LIMIT:-1800}
       - APP_PASSWORD=$${APP_PASSWORD:-}
+      - ANTHROPIC_API_KEY=$${ANTHROPIC_API_KEY:-}
       # nginx is the only proxy in front of the app: trust exactly one hop.
       - TRUST_PROXY=1
       - SMTP_HOST_ALLOWLIST=${smtp_host_allowlist}
