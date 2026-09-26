@@ -90,9 +90,9 @@ $('#testBtn').addEventListener('click', async () => {
 
 // ---- Step navigation ----
 function showStep(n) {
-  $('#step1').style.display = n === 1 ? '' : 'none';
-  $('#step2').style.display = n === 2 ? '' : 'none';
-  $('#step3').style.display = n === 3 ? '' : 'none';
+  $('#step1').style.display = n === 1 ? 'block' : 'none';
+  $('#step2').style.display = n === 2 ? 'block' : 'none';
+  $('#step3').style.display = n === 3 ? 'block' : 'none';
 }
 
 $('#backBtn').addEventListener('click', () => {
