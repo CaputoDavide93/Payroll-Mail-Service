@@ -25,6 +25,8 @@ jobs:
         run: npm ci
       - name: Test
         run: npm test
+      - name: Diagrams up to date
+        run: python3 tools/gen_diagram.py --check
 
   shellcheck:
     name: Shellcheck

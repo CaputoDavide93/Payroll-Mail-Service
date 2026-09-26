@@ -44,7 +44,7 @@
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/architecture-dark.svg">
   <img src="docs/assets/architecture-light.svg" width="100%"
-       alt="The browser talks to the Express API in a single Node process. The API keeps settings, campaigns and recipients in SQLite under DATA_DIR and hands payslip preparation to a worker thread, which can ask the Anthropic API to match PDFs and encrypts each one with qpdf. A send loop claims batches from SQLite and sends them over SMTP.">
+       alt="The browser talks to the Express API, which keeps campaigns and recipients in SQLite under DATA_DIR and hands payslip preparation to a worker thread that can ask the Anthropic API to match PDFs and encrypts each with qpdf, while a send loop claims batches from SQLite every two seconds and sends them over SMTP.">
 </picture>
 
 - **Backend:** Node.js + Express. SMTP via `nodemailer`.
@@ -54,7 +54,7 @@
 - **Payslips:** AI + fuzzy name matching (30 s timeout), `qpdf` 256-bit AES encryption in a worker thread, raw PDFs deleted immediately after protection, protected PDFs deleted after send, NI numbers never persisted.
 - **Image:** Multi-stage Node 22 (Debian trixie) build from the lockfile, runs as the unprivileged `node` user.
 - **Frontend:** Static HTML/CSS/JS — no build step.
-- **Diagrams:** Drawn by `tools/gen_diagram.py` (Python standard library only) — run `python3 tools/gen_diagram.py` after changing one.
+- **Diagrams:** Drawn by `tools/gen_diagram.py` (Python standard library only) — run `python3 tools/gen_diagram.py` after changing one; CI runs it with `--check`.
 
 ---
 
@@ -257,7 +257,7 @@ Payroll-Mail-Service/
 ├── config/                    # 📝 sample-recipients.example.csv (recipient CSV template)
 ├── docs/assets/               # 🗺️ diagram SVGs, light and dark
 ├── terraform/                 # ☁️ AWS deployment (EC2, ECR, Route53, Secrets Manager)
-├── .github/workflows/ci.yml   # 🤖 npm test + shellcheck on push and PR
+├── .github/workflows/ci.yml   # 🤖 tests, diagram check, shellcheck
 ├── Dockerfile                 # 🐳 multi-stage Node 22 image, non-root
 ├── docker-compose.yml         # 🐳 local service + mail-data volume
 ├── .env.example               # ⚙️ environment template
@@ -276,9 +276,9 @@ npm ci
 npm test          # node --test (needs qpdf on PATH for the payslip tests)
 ```
 
-`tests/diagrams.test.js` also checks that the committed SVGs in `docs/assets/` match `tools/gen_diagram.py`.
+`tests/diagrams.test.js` also checks that every README `<picture>` points at SVGs that exist, in both schemes, with real alt text. `python3 tools/gen_diagram.py --check` fails if the committed SVGs in `docs/assets/` are stale.
 
-CI ([ci.yml](.github/workflows/ci.yml)) runs `npm ci && npm test` on Node 22 with `qpdf` installed, plus `shellcheck scripts/deploy.sh`, on every push and pull request.
+CI ([ci.yml](.github/workflows/ci.yml)) runs `npm ci && npm test` on Node 22 with `qpdf` installed, `python3 tools/gen_diagram.py --check`, and `shellcheck scripts/deploy.sh`, on every push and pull request.
 
 ---
 

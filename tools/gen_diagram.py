@@ -1,30 +1,24 @@
 #!/usr/bin/env python3
-"""Draw every diagram in this repository as SVG, one file per colour scheme.
+"""Draw this repository's diagrams as SVG, one file per colour scheme.
 
   docs/assets/<name>-light.svg
   docs/assets/<name>-dark.svg
 
-These replace the Mermaid flowchart the README used to carry. GitHub renders
-Mermaid with its own version and its own theme, decodes HTML entities before
-parsing, and lays the graph out however it likes. Drawn here, each picture says
-one thing and stays put.
+House diagram kit (canonical copy: ~/.claude/skills/new-repo/assets/gen_diagram.py,
+first built for InkFrame-Immich). The engine below the "diagrams" line is shared
+verbatim across repos; only the diagram functions and DIAGRAMS change per repo.
 
-**GitHub sanitises SVG in markdown**, so there is no <style>, no <script>, no
-web font and no <foreignObject>. Everything is a presentation attribute and the
-type is a system stack. Each pair is served from one <picture>, which GitHub
-switches on prefers-color-scheme.
+GitHub sanitises SVG in markdown: no <style>, no <script>, no web font, no
+<foreignObject>. Everything is a presentation attribute and the type is a system
+stack. Each pair is served from one <picture>, which GitHub switches on
+prefers-color-scheme. Layout is explicit rather than solved.
 
-Layout is explicit rather than solved: the diagrams are small enough that
-placing them by hand is cheaper than a layout engine nobody can predict.
+House rules: a slate scale, a single accent on the one thing that matters in each
+picture, drawn icons rather than emoji, monospace for anything literally typed,
+text contrast at or above 4.5:1 in both schemes.
 
-House rules: a slate scale, a single accent on the one thing that matters in
-each picture, drawn icons rather than emoji, monospace for anything that is
-literally typed (paths, endpoints, env vars), a footer sentence under every
-diagram, and text contrast at or above 4.5:1 in both schemes.
-
-The app is Node; this script needs only the Python standard library. Run it
-after changing a diagram (python3 tools/gen_diagram.py) and commit the SVGs it
-writes; tests/diagrams.test.js checks the pages that embed them.
+  python3 tools/gen_diagram.py          # write the SVGs
+  python3 tools/gen_diagram.py --check  # exit 1 if any SVG is stale (for CI)
 """
 from __future__ import annotations
 
@@ -48,22 +42,58 @@ SCHEMES = {
 
 # Stroked glyphs on a 24x24 grid, drawn rather than typed.
 ICONS = {
-    "user":     "M12 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7",
-    "screen":   "M3 4h18v12H3z M8 20h8 M12 16v4 M7 12l3-3 2 2 4-4",
-    "server":   "M4 4h16v7H4z M4 13h16v7H4z M8 7.5h1 M8 16.5h1",
-    "database": "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6 "
-                "M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
-    "mail":     "M3 5h18v14H3z M3 6l9 7 9-7",
-    "file":     "M6 3h8l4 4v14H6z M14 3v4h4 M9 13h6 M9 17h4",
-    "sparkle":  "M11 3l1.9 5.6L18.5 10.5l-5.6 1.9L11 18l-1.9-5.6L3.5 10.5l5.6-1.9z "
-                "M19 15l.8 2.2 2.2.8-2.2.8L19 21l-.8-2.2-2.2-.8 2.2-.8z",
-    "lock":     "M6 11h12v10H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3",
-    "key":      "M8 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M12 12h9 M18 12v3 M15 12v2",
-    "package":  "M3 7l9-4 9 4v10l-9 4-9-4z M3 7l9 4 9-4 M12 11v10",
-    "globe":    "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18z M3 12h18 "
-                "M12 3c2.5 2.5 3.8 5.5 3.8 9s-1.3 6.5-3.8 9c-2.5-2.5-3.8-5.5-3.8-9S9.5 5.5 12 3z",
-    "terminal": "M3 5h18v14H3z M7 10l3 2.5L7 15 M12 15h5",
-    "shield":   "M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z M9 12l2 2 4-4",
+    "library":  "M3 7h13v11H3z M6 4h13v11 M7 14l3-3 2.5 2.5L15 11l2 2.5",
+    "chip":     "M8 8h8v8H8z M5 5h14v14H5z M10 2v3 M14 2v3 M10 19v3 M14 19v3 M2 10h3 M2 14h3 M19 10h3 M19 14h3",
+    "frame":    "M3 5h18v12H3z M9 20h6 M12 17v3 M6 13l3.5-4 2.5 3 2-2.5L18 13",
+    "house":    "M4 11 12 4l8 7 M6 10v9h12v-9 M10 19v-5h4v5",
+    "moon":     "M20 14.5A8.5 8.5 0 0 1 9.5 4 8.5 8.5 0 1 0 20 14.5z",
+    "bolt":     "M13 2 4 14h7l-1 8 9-12h-7z",
+    "server":   "M4 4h16v6H4z M4 14h16v6H4z M7 7h.01 M7 17h.01 M11 7h6 M11 17h6",
+    "database": "M4 6c0-1.7 3.6-3 8-3s8 1.3 8 3-3.6 3-8 3-8-1.3-8-3z M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6 M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3",
+    "cloud":    "M7 18h10a4 4 0 0 0 .5-7.97A6 6 0 0 0 6.1 9.5 4.3 4.3 0 0 0 7 18z",
+    "laptop":   "M5 5h14v10H5z M2 19h20 M9 19l1-2h4l1 2",
+    "phone":    "M8 2h8a1 1 0 0 1 1 1v18a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1V3a1 1 0 0 1 1-1z M11 18h2",
+    "mail":     "M3 6h18v12H3z M3 7l9 6 9-6",
+    "clock":    "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M12 7v5l3 2",
+    "shield":   "M12 3 4 6v6c0 4.5 3.4 8.3 8 9 4.6-.7 8-4.5 8-9V6z M9 12l2 2 4-4",
+    "box":      "M12 3 3 7.5v9L12 21l9-4.5v-9z M3 7.5 12 12l9-4.5 M12 12v9",
+    "user":     "M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M4 21c0-4 3.6-6 8-6s8 2 8 6",
+    "users":    "M9 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7z M2 20c0-3.5 3-5.5 7-5.5s7 2 7 5.5 M16 4.5a3.5 3.5 0 0 1 0 6.5 M18 14.8c2.4.6 4 2.3 4 5.2",
+    "key":      "M14 10a4 4 0 1 0-3.2 3.9L13 16h2v2h2v2h3v-3l-5.1-5.1c.1-.3.1-.6.1-.9z M8 9h.01",
+    "camera":   "M3 8h4l2-3h6l2 3h4v11H3z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+    "chart":    "M4 20V4 M4 20h16 M8 16v-5 M12 16V8 M16 16v-3",
+    "api":      "M8 7 3 12l5 5 M16 7l5 5-5 5 M14 4l-4 16",
+    "bell":     "M6 16V11a6 6 0 1 1 12 0v5l2 2H4z M10 21h4",
+    "chat":     "M4 5h16v11H9l-5 4z",
+    "gear":     "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z M19.4 13a7.6 7.6 0 0 0 0-2l2-1.6-2-3.4-2.4 1a7.4 7.4 0 0 0-1.7-1L15 3.5h-4l-.4 2.5a7.4 7.4 0 0 0-1.7 1l-2.4-1-2 3.4 2 1.6a7.6 7.6 0 0 0 0 2l-2 1.6 2 3.4 2.4-1a7.4 7.4 0 0 0 1.7 1l.4 2.5h4l.4-2.5a7.4 7.4 0 0 0 1.7-1l2.4 1 2-3.4z",
+    "code":     "M4 4h16v16H4z M9 9l-3 3 3 3 M15 9l3 3-3 3",
+    "tv":       "M3 5h18v12H3z M8 21h8",
+    "play":     "M6 4l14 8-14 8z",
+    "file":     "M6 2h8l5 5v15H6z M14 2v5h5 M9 13h6 M9 17h6",
+    "lock":     "M6 11h12v10H6z M8 11V7a4 4 0 0 1 8 0v4",
+    "globe":    "M12 3a9 9 0 1 0 0 18 9 9 0 0 0 0-18z M3 12h18 M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9 M12 3c-2.5 2.7-3.8 5.7-3.8 9s1.3 6.3 3.8 9",
+    "wifi":     "M2 9a15 15 0 0 1 20 0 M5.5 12.5a10 10 0 0 1 13 0 M9 16a5 5 0 0 1 6 0 M12 19.5h.01",
+    "disk":     "M3 6h18v12H3z M7 14h.01 M11 14h6",
+    "terminal": "M3 5h18v14H3z M7 10l3 2.5L7 15 M12.5 15h4.5",
+    "calendar": "M4 6h16v15H4z M4 10h16 M8 3v5 M16 3v5 M8 14h2 M14 14h2 M8 17.5h2",
+    "refresh":  "M20 12a8 8 0 1 1-2.3-5.7 M20 4v4.5h-4.5",
+    "search":   "M10.5 4a6.5 6.5 0 1 0 0 13 6.5 6.5 0 1 0 0-13z M15.5 15.5 20 20",
+    "filter":   "M4 5h16l-6 7.5V19l-4 1.5v-8z",
+    "send":     "M21 3 3 10.5l7.5 3 3 7.5z M10.5 13.5 21 3",
+    "alert":    "M12 3 22 20H2z M12 10v4 M12 17h.01",
+    "archive":  "M3 4h18v4H3z M5 8v12h14V8 M10 12h4",
+    "tag":      "M3 3h8l10 10-8 8L3 11z M7.5 7.5h.01",
+    "user_plus":  "M10 11a4 4 0 1 0 0-8 4 4 0 1 0 0 8z M3 21c0-4 3-7 7-7s7 3 7 7 M19 8v6 M16 11h6",
+    "user_x":     "M10 11a4 4 0 1 0 0-8 4 4 0 1 0 0 8z M3 21c0-4 3-7 7-7s7 3 7 7 M16.5 8.5l5 5 M21.5 8.5l-5 5",
+    "user_check": "M10 11a4 4 0 1 0 0-8 4 4 0 1 0 0 8z M3 21c0-4 3-7 7-7s7 3 7 7 M16 11l2 2 4-4",
+    "bucket":   "M4 6h16l-2 14H6z M4 6c0-1.5 3.6-2.5 8-2.5s8 1 8 2.5",
+    "download": "M12 3v12 M7 10l5 5 5-5 M4 20h16",
+    "wrench":   "M14.7 6.3a4 4 0 0 1 5-1.5l-2.6 2.6.5 2 2 .5 2.6-2.6a4 4 0 0 1-5.4 5.1L10 19.2",
+    "bug":      "M9 7a3 3 0 0 1 6 0 M7 9h10v5a5 5 0 0 1-10 0z M12 9v10 M3 12h4 M17 12h4",
+    "pulse":    "M3 12h4l2.5-6 5 12 2.5-6h4",
+    "sliders":  "M4 6h9 M17 6h3 M4 12h3 M11 12h9 M4 18h11 M19 18h1 M15 4v4 M9 10v4 M17 16v4",
+    "heart":    "M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7.5 3c0 5.4-7.5 10-7.5 10z",
+    "sparkle":  "M11 3l1.9 5.6L18.5 10.5l-5.6 1.9L11 18l-1.9-5.6L3.5 10.5l5.6-1.9z",
     "rewind":   "M11 6 4 12l7 6z M20 6l-7 6 7 6z",
 }
 
@@ -151,7 +181,7 @@ class Canvas:
         path = " ".join(f"{x},{y}" for x, y in pts)
         out = [f'<polyline points="{path}" fill="none" stroke="{c["line"]}" '
                f'stroke-width="1.5"{d} marker-end="url(#a)"'
-               + (' marker-start="url(#a)"' if both else "") + "/>"]
+               + (' marker-start="url(#b)"' if both else "") + "/>"]
         if label:
             (x1, y1), (x2, y2) = pts[0], pts[-1]
             lx = x1 + (x2 - x1) * label_at
@@ -183,48 +213,67 @@ class Canvas:
             f'<marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" '
             f'markerHeight="6" orient="auto-start-reverse">'
             f'<path d="M0 0 10 5 0 10z" fill="{c["line"]}"/></marker>'
+            f'<marker id="b" viewBox="0 0 10 10" refX="1" refY="5" markerWidth="6" '
+            f'markerHeight="6" orient="auto">'
+            f'<path d="M10 0 0 5 10 10z" fill="{c["line"]}"/></marker>'
             f'</defs>' + "".join(self.parts) + "</svg>"
         )
-
 
 # ── the diagrams ──────────────────────────────────────────────────────────
 
 def architecture(scheme):
     """One Node process, one SQLite file. The send loop is what survives."""
-    k = Canvas(1180, 440, scheme,
-               "The browser talks to the Express API in a single Node process. The API keeps "
+    k = Canvas(1180, 618, scheme,
+               "The browser talks to the Express API in one Node process. The API keeps "
                "settings, campaigns and recipients in SQLite under DATA_DIR and hands payslip "
-               "preparation to a worker thread, which can ask the Anthropic API to match PDFs and "
-               "encrypts each one with qpdf. A send loop claims batches from SQLite and sends "
-               "them over SMTP.")
+               "preparation to a worker thread, which can ask the Anthropic API to match PDFs to "
+               "employees and encrypts each one with qpdf; the API can also ask Anthropic for a "
+               "pre-flight review. A send loop claims batches from SQLite every two seconds and "
+               "sends them over SMTP.")
     c = k.c
-    ax, bx, w = 276, 596, 238
-    r1, r2, h = 84, 236, 84
+    W, H = 268, 108
+    xs, rows = [24, 456, 888], [56, 244, 432]
+    mids = [r + H / 2 for r in rows]
+    cx = [x + W / 2 for x in xs]
+    gap1 = (rows[0] + H + rows[1]) / 2
+    gap2 = (rows[1] + H + rows[2]) / 2
     k.add(
-        k.group(252, 40, 606, 304, "ONE NODE PROCESS"),
-        k.box(24, r1, 180, h, "Browser", ["campaigns and", "payslips pages"], icon="screen"),
-        k.box(ax, r1, w, h, "Express API", ["the UI and /api routes,", "APP_PASSWORD gate"],
+        k.box(xs[0], rows[0], W, H, "Browser", ["Campaigns and Payslips pages,", "static HTML, no build step"],
+              icon="laptop"),
+        k.box(xs[1], rows[0], W, H, "Express API", ["server.js: the UI and /api,", "optional APP_PASSWORD gate"],
               icon="server"),
-        k.box(bx, r1, w, h, "DATA_DIR", ["SQLite: campaigns, recipients,", "settings; payslip PDFs"],
+        k.box(xs[2], rows[0], W, H, "DATA_DIR", ["SQLite: settings, campaigns,", "recipients; payslip PDFs"],
               icon="database"),
-        k.box(ax, r2, w, h, "Payslip thread", ["matches PDFs to people,", "encrypts each with qpdf"],
+        k.box(xs[0], rows[1], W, H, "Anthropic API", ["optional: PDF-to-name matching", "and the pre-flight review"],
+              icon="sparkle"),
+        k.box(xs[1], rows[1], W, H, "Payslip thread", ["matches PDFs to employees,", "encrypts each with qpdf"],
               icon="lock"),
-        k.box(bx, r2, w, h, "Send loop", ["every 2 s: claims a batch,", "keeps to the daily cap"],
-              icon="mail", tone="accent"),
-        k.box(24, r2, 180, h, "Anthropic API", ["name matching,", "optional"], icon="sparkle"),
-        k.box(930, r2, 226, h, "SMTP server", ["Gmail or Workspace,", "App Password"], icon="mail"),
-        k.edge([(204 + 8, r1 + h / 2), (ax - 8, r1 + h / 2)], label="/api", label_at=0.3),
-        k.edge([(ax + w + 8, r1 + h / 2), (bx - 8, r1 + h / 2)], both=True),
-        k.edge([(ax + w / 2, r1 + h + 8), (ax + w / 2, r2 - 8)]),
-        k.text(ax + w / 2 + 12, (r1 + h + r2) / 2 + 4, "/api/payslips/prepare", size=11.5,
-               font=MONO, colour=c["chip"]),
-        k.edge([(ax - 8, r2 + h / 2), (204 + 8, r2 + h / 2)], dash=True),
-        k.edge([(bx + w / 2, r1 + h + 8), (bx + w / 2, r2 - 8)]),
-        k.text(bx + w / 2 + 12, (r1 + h + r2) / 2 + 4, "claim batch", size=11.5, font=MONO,
-               colour=c["chip"]),
-        k.edge([(bx + w + 8, r2 + h / 2), (930 - 8, r2 + h / 2)]),
+        k.box(xs[2], rows[1], W, H, "Send loop", ["every 2 s: claims a batch,", "keeps to the daily cap"],
+              icon="send", tone="accent"),
+        k.box(xs[2], rows[2], W, H, "SMTP server", ["Gmail or Workspace,", "allowlisted host, App Password"],
+              icon="mail"),
+        # Row 1: browser in, state out.
+        k.edge([(xs[0] + W + 8, mids[0]), (xs[1] - 8, mids[0])], label="/api + uploads"),
+        k.edge([(xs[1] + W + 8, mids[0]), (xs[2] - 8, mids[0])], both=True, label="better-sqlite3"),
+        # API -> payslip thread: the Excel and the ZIP go off the main thread.
+        k.edge([(cx[1], rows[0] + H + 8), (cx[1], rows[1] - 8)]),
+        k.text(cx[1] + 14, gap1 + 4, "Excel + ZIP", size=11.5, font=MONO, colour=c["chip"]),
+        # API -> Anthropic for the pre-flight review, routed round the browser.
+        k.edge([(xs[1] + 32, rows[0] + H + 8), (xs[1] + 32, gap1), (cx[0], gap1), (cx[0], rows[1] - 8)],
+               dash=True),
+        k.text((cx[0] + xs[1] + 32) / 2, gap1 - 9, "pre-flight review", size=11.5, font=MONO,
+               colour=c["chip"], anchor="middle"),
+        # Payslip thread -> Anthropic for matching.
+        k.edge([(xs[1] - 8, mids[1]), (xs[0] + W + 8, mids[1])], dash=True, label="names + filenames"),
+        # Right column: the queue lives in SQLite, the send loop drains it.
+        k.edge([(cx[2], rows[0] + H + 8), (cx[2], rows[1] - 8)], both=True),
+        k.text(cx[2] - 14, gap1 + 4, "claim batch, mark sent", size=11.5, font=MONO,
+               colour=c["chip"], anchor="end"),
+        k.edge([(cx[2], rows[1] + H + 8), (cx[2], rows[2] - 8)]),
+        k.text(cx[2] - 14, gap2 + 4, "each mail, up to 3 tries", size=11.5, font=MONO,
+               colour=c["chip"], anchor="end"),
         k.footer("The browser can close at any time: the send loop takes its queue from SQLite, "
-                 "so a restart resumes where it stopped."),
+                 "and a restart resets rows left mid-send and resumes."),
     )
     return k.render()
 
@@ -244,7 +293,7 @@ def aws_deployment(scheme):
         k.group(330, 40, 520, 332, "EC2 INSTANCE, AMAZON LINUX 2023"),
         k.box(ax, r1, w, 84, "nginx", ["TLS on 443,", "80 redirects to 443"], icon="shield"),
         k.box(bx, r1, w, 84, "App container", ["SQLite and payslips on", "the mail-data volume"],
-              icon="package", tone="accent"),
+              icon="box", tone="accent"),
         k.box(ax, r2, w, 100, "payroll-cert", ["issues and renews the", "certificate, twice daily"],
               icon="lock"),
         k.box(bx, r2, w, 100, "payroll-update", ["pulls a tag, health-checks,", "rolls back on failure"],
@@ -266,7 +315,7 @@ def aws_deployment(scheme):
         k.box(940, r1, 216, 84, "Secrets Manager", ["app config, written", "to .env at boot"],
               icon="key"),
         k.edge([(940 - 8, r1 + 42), (bx + w + 8, r1 + 42)], dash=True),
-        k.box(940, r2, 216, 100, "ECR", ["scan on push; keeps", ":latest and :base"], icon="package"),
+        k.box(940, r2, 216, 100, "ECR", ["scan on push; keeps", ":latest and :base"], icon="box"),
         k.edge([(940 - 8, r2 + 50), (bx + w + 8, r2 + 50)], label="pull"),
     )
     by = 432
@@ -279,7 +328,8 @@ def aws_deployment(scheme):
         k.box(940, by, 216, 84, "scripts/deploy.sh", ["builds and pushes,", "then rolls the instance"],
               icon="terminal"),
         k.edge([(1048, by - 8), (1048, r2 + 100 + 8)]),
-        k.text(1036, by - 26, "push :sha, :latest, :base", size=11.5, font=MONO, colour=c["chip"], anchor="end"),
+        k.text(1036, by - 26, "push :sha, :latest, :base", size=11.5, font=MONO, colour=c["chip"],
+               anchor="end"),
         k.edge([(940 - 8, by + 42), (bx + w / 2, by + 42), (bx + w / 2, r2 + 100 + 8)]),
         k.text(bx + w / 2 + 12, by + 33, "SSM: payroll-update <sha>", size=11.5, font=MONO,
                colour=c["chip"]),
@@ -296,12 +346,26 @@ DIAGRAMS = {
 
 
 def main() -> None:
+    import sys
+    check = "--check" in sys.argv[1:]
     out = ROOT / "docs" / "assets"
     out.mkdir(parents=True, exist_ok=True)
+    stale = []
     for name, fn in DIAGRAMS.items():
         for scheme in SCHEMES:
             path = out / f"{name}-{scheme}.svg"
-            path.write_text(fn(scheme), encoding="utf-8")
+            svg = fn(scheme)
+            if check:
+                if not path.exists() or path.read_text(encoding="utf-8") != svg:
+                    stale.append(str(path.relative_to(ROOT)))
+            else:
+                path.write_text(svg, encoding="utf-8")
+    if check:
+        if stale:
+            print("stale diagrams (run python3 tools/gen_diagram.py):\n  " + "\n  ".join(stale))
+            sys.exit(1)
+        print(f"{len(DIAGRAMS) * len(SCHEMES)} diagram files up to date")
+        return
     print(f"{len(DIAGRAMS)} diagrams x {len(SCHEMES)} schemes -> docs/assets/")
 
 
