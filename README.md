@@ -58,6 +58,18 @@
 
 ---
 
+## 📸 Screenshots
+
+Demo data only: made-up employees at `example.com`, dummy PDFs, and a local fake SMTP server.
+
+<img src="docs/assets/screenshots/upload.png" width="100%" alt="Payslip sender step 1: the employee Excel sheet and the ZIP of payslip PDFs selected, ready to prepare.">
+
+<img src="docs/assets/screenshots/review.png" width="100%" alt="Payslip sender step 2: thirteen PDFs matched to employees and protected, with one employee left without a payslip and one spare file flagged.">
+
+<img src="docs/assets/screenshots/send-progress.png" width="100%" alt="Sends list: a payslip run sending in batches with 6 of 13 sent, above a completed campaign.">
+
+---
+
 ## 📋 Prerequisites
 
 | Requirement | Version |
@@ -255,7 +267,7 @@ Payroll-Mail-Service/
 ├── scripts/deploy.sh          # 🚀 build, push to ECR, roll the instance via SSM
 ├── tools/gen_diagram.py       # 🖌️ draws the README diagrams into docs/assets/
 ├── config/                    # 📝 sample-recipients.example.csv (recipient CSV template)
-├── docs/assets/               # 🗺️ diagram SVGs, light and dark
+├── docs/assets/               # 🗺️ diagram SVGs, light and dark, plus screenshots/
 ├── terraform/                 # ☁️ AWS deployment (EC2, ECR, Route53, Secrets Manager)
 ├── .github/workflows/ci.yml   # 🤖 tests, diagram check, shellcheck
 ├── Dockerfile                 # 🐳 multi-stage Node 22 image, non-root
