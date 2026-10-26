@@ -58,7 +58,3 @@ Only if you set `APP_PASSWORD`. Without it the UI and API are open to anyone who
 ## Does it work outside the UK?
 
 The mail side does. The payslip side assumes a UK National Insurance number as the password and the four Excel columns listed in [payslips.md](payslips.md#excel-format).
-
-## Is it affiliated with any payroll or email provider?
-
-No. It is an independent project.
