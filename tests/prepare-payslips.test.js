@@ -71,7 +71,7 @@ describe('protectPdf', () => {
     assert.deepEqual(after, before);
     // --requires-password exits 0 when the file is encrypted
     execFileSync('qpdf', ['--requires-password', output]);
-    execFileSync('qpdf', ['--password=AB123456C', '--check', output]);
+    execFileSync('qpdf', ['--password=AB123456C', '--show-encryption', output]); // non-zero on a wrong password
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });
