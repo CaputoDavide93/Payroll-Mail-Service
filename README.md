@@ -166,7 +166,7 @@ Payroll-Mail-Service/
 ├── config/                    # 📝 sample recipients CSV
 ├── docs/                      # 📚 guides, plus assets/ (diagrams, screenshots, brand)
 ├── terraform/                 # ☁️ AWS deployment (EC2, ECR, Route53, Secrets Manager)
-├── .github/                   # 🤖 CI workflow and issue form
+├── .github/                   # 🤖 CI workflow, dependabot config and issue form
 ├── Dockerfile  docker-compose.yml  .dockerignore                  # 🐳 container
 ├── Makefile                   # ✅ make check, diagram, screenshots
 ├── .env.example               # ⚙️ every variable the code reads
