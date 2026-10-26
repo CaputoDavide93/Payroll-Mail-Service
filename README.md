@@ -4,7 +4,7 @@
 
 # 💸 Payroll Mail Service
 
-**Self-hosted payslip mailer for UK payroll admins: matches each PDF to an employee, locks it with their NI number, and sends in Gmail-safe batches**
+**Email each employee their own NI-locked payslip PDF, from your own server, in batches that stay under Gmail's daily limit**
 
 ![Node.js](https://img.shields.io/badge/Node.js-22-5FA04E?logo=nodedotjs&logoColor=white)
 ![Express](https://img.shields.io/badge/Express-000000?logo=express&logoColor=white)
