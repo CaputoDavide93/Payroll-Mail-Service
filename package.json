@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "adm-zip": "^0.6.1",
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^13.0.3",
     "csv-parse": "^7.0.3",
     "express": "^4.21.2",
     "multer": "^1.4.5-lts.1",
