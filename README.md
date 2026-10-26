@@ -172,7 +172,7 @@ Payroll-Mail-Service/
 ├── .env.example               # ⚙️ every variable the code reads
 ├── package.json  package-lock.json
 ├── llms.txt                   # 🤖 plain-text summary for search and assistants
-├── AGENTS.md  CLAUDE.md       # 🧭 contributor-tool instructions
+├── AGENTS.md                  # 🧭 instructions for contributors and coding agents
 ├── CONTRIBUTING.md  SECURITY.md  LICENSE
 └── README.md
 ```
