@@ -22,10 +22,10 @@
 
 ## ✨ Features
 
-Payroll Mail Service is a free, open-source web app you run yourself. You upload an
-employee spreadsheet and a ZIP of payslip PDFs. It pairs each PDF with the right
-person, encrypts it with that person's NI number as the password, and emails each
-employee only their own file, in batches slow enough for Gmail or Google Workspace.
+Upload an employee spreadsheet and a ZIP of payslip PDFs. The service pairs each PDF
+with the right person, encrypts it with that person's NI number as the password, and
+emails each employee only their own file, in batches slow enough for Gmail or Google
+Workspace. You run it yourself, so payslips never pass through a third-party service.
 It also sends ordinary personalised campaigns from a CSV.
 
 ### Why it exists
@@ -35,9 +35,9 @@ right file reached the right inbox. Pasting 600 recipients into a mail client ge
 you throttled by your provider halfway through, and nobody can tell afterwards who
 got what.
 
-This service does the matching, the password protection and the pacing for you. You
-check one review screen, press send, and close the browser. Sending continues on the
-server and resumes by itself after a restart.
+The service does the matching, the password protection and the pacing. You check one
+review screen, press send, and close the browser. Sending carries on at the server and
+resumes by itself after a restart.
 
 | | Payroll Mail Service | Sending by hand from a mail client | A one-off script |
 |---|---|---|---|
@@ -48,9 +48,9 @@ server and resumes by itself after a restart.
 | Cleans up payroll data | Protected PDFs deleted after sending, runs purged after N days | Files stay in the mail client and on disk | Only if you built it |
 | Where your data goes | Your server and your SMTP provider | Your mail provider | Wherever you put it |
 
-The main trade-off: you run and secure the server. It holds payroll data while a run
-is in progress, so it belongs on a machine you control, behind `APP_PASSWORD` and
-HTTPS if anyone but you can reach it.
+The trade-off: you run and secure the server. It holds payroll data while a run is in
+progress, so keep it on a machine you control, and put `APP_PASSWORD` and HTTPS in
+front of it if anyone but you can reach it.
 
 ### Install in 3 steps
 
@@ -118,8 +118,8 @@ More screens, one per setup step, are in [docs/setup.md](docs/setup.md).
        alt="The browser talks to the Express API, which keeps campaigns and recipients in SQLite under DATA_DIR and hands payslip preparation to a worker thread that can ask an external AI service to match PDFs and encrypts each with qpdf, while a send loop claims batches from SQLite every two seconds and sends them over SMTP.">
 </picture>
 
-One Node process serves the static UI and the API, a second thread prepares payslips,
-and one SQLite file holds all state. Details are in [docs/how-it-works.md](docs/how-it-works.md).
+One Node process serves the UI and the API, a second thread prepares payslips, and
+one SQLite file holds all state. [docs/how-it-works.md](docs/how-it-works.md) has the details.
 
 ---
 
