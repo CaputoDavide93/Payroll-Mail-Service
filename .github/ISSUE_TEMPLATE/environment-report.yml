@@ -1,0 +1,45 @@
+name: Environment report
+description: Tell us whether Payroll Mail Service works on your setup
+labels: [environment]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Remove NI numbers, real names, email addresses and payslips from anything you paste.
+  - type: dropdown
+    id: result
+    attributes:
+      label: Did it work?
+      options: [Works, Works with changes, Does not work]
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Operating system and CPU
+      placeholder: Ubuntu 24.04, x86_64
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Docker version, or Node.js version and how you installed qpdf
+    validations:
+      required: true
+  - type: input
+    id: smtp
+    attributes:
+      label: Mail provider and port
+      placeholder: Google Workspace, 465
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Output of `docker logs payroll-mail-service`, or your terminal, with personal data removed
+      render: text
+  - type: textarea
+    id: notes
+    attributes:
+      label: What you changed or noticed

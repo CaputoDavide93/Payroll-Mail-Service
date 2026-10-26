@@ -131,3 +131,44 @@ dialog .card { box-shadow: none; border: none; }
   border: 1px solid var(--line); border-radius: 6px; padding: .5rem .75rem;
   color: var(--muted); white-space: pre; overflow-x: auto;
 }
+
+/* Dark scheme: follows the operating system. Only colours change. */
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --bg: #11151c;
+    --card: #1a202a;
+    --ink: #e6ebf2;
+    --muted: #97a3b4;
+    --line: #2d3644;
+    --primary: #4d86ff;
+    --primary-d: #7aa5ff;
+    --green: #3ccb8b;
+    --red: #f2806b;
+    --amber: #f0b92e;
+    --surface: #1a202a;
+    --border: #2d3644;
+    --shadow: 0 1px 3px rgba(0,0,0,.4), 0 6px 24px rgba(0,0,0,.3);
+  }
+  code { background: #252d3a; }
+  input, textarea, select { background: #11151c; }
+  input:focus, textarea:focus, select:focus { outline-color: #34508f; }
+  .btn { background: #222a36; }
+  .btn:hover { background: #2a3342; }
+  .btn.primary { background: #2f6df6; border-color: #2f6df6; color: #fff; }
+  .btn.primary:hover { background: #4d86ff; }
+  .btn.ghost { background: transparent; }
+  .btn.ghost:hover { background: #222a36; }
+  .btn.danger { border-color: #6a3329; }
+  .campaign { background: #1e2530; }
+  .badge.draft { background: #252d3a; }
+  .badge.scheduled { background: #3a3012; }
+  .badge.running { background: #12372a; }
+  .badge.paused { background: #3d2a14; }
+  .badge.completed { background: #1c2f57; }
+  .badge.cancelled, .badge.failed { background: #44201a; }
+  .bar { background: #2a3342; }
+  .howto-rec { background: #12372a; }
+  .howto-example { background: #11151c; }
+  dialog { color: var(--ink); }
+}

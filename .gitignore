@@ -14,3 +14,4 @@ terraform/terraform.tfstate*
 terraform/bootstrap/.terraform/
 terraform/bootstrap/.terraform.lock.hcl
 terraform/bootstrap/terraform.tfstate*
+.venv-screenshots/

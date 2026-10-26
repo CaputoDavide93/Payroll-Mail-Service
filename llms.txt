@@ -1,0 +1,31 @@
+# Payroll Mail Service
+
+> Payroll Mail Service is a free, open-source (MIT) web app you host yourself that emails each employee their own password-protected payslip PDF. You upload an employee Excel sheet and a ZIP of PDFs. It matches each PDF to an employee by name, encrypts it with that employee's UK National Insurance number as the password, and sends in batches that stay under Gmail and Google Workspace limits. It also sends ordinary personalised campaigns from a CSV. State lives in SQLite, so sending resumes after a crash or restart.
+
+Key facts:
+
+- Tested: Node.js 22 on Ubuntu with qpdf (CI on every push); Node.js 22 on macOS Apple silicon with qpdf 12; the Docker image on Docker Desktop for Mac (builds, answers on its port, qpdf present). Gmail and Google Workspace over SMTP is the design target but was not re-tested against a live account in the latest review. The AWS Terraform stack, Windows, other Linux distributions and other mail providers are unverified. Node.js 26 failed to build better-sqlite3 during npm ci.
+- Install: git clone, then docker compose up -d --build, open http://localhost:3000, enter a Gmail address and App Password in Settings. Without Docker: npm ci && npm start with qpdf on PATH.
+- Payslips: each PDF is encrypted with 256-bit AES through qpdf. NI numbers are never stored or logged. Raw PDFs are deleted after protection, protected PDFs after sending, and whole runs after PAYSLIP_RETENTION_DAYS (7 by default).
+- Matching: fuzzy name matching works offline. Optional AI matching and a pre-flight review need an API key for an external AI service and send recipient names, email addresses and payslip filenames to that API, never payslip contents or NI numbers.
+- Sending: configurable batch size and pause, a rolling 24-hour daily cap, scheduled starts, pause, resume, stop and retry. Delivery is at least once: a crash between the mail server accepting a message and the database write can send one duplicate.
+- Security: set APP_PASSWORD on any server and serve over HTTPS. The UI can only use SMTP hosts on SMTP_HOST_ALLOWLIST. Five wrong UI passwords from one address lock that address out for a minute.
+- Trade-off: you run and secure the server, which holds payroll data while a run is in progress.
+- Independent project, not affiliated with any payroll or email provider.
+
+## Docs
+
+- [README](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/README.md): why it exists, comparison, install in 3 steps, features, tested environments
+- [Setup](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/setup.md): install, Gmail App Password, first campaign, first payslip run
+- [Payslips](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/payslips.md): workflow, Excel format, retention, AI matching and your data
+- [Configuration](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/configuration.md): every environment variable
+- [Deployment](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/deployment.md): Linux server and AWS Terraform
+- [Deliverability](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/deliverability.md): SPF, DKIM, DMARC
+- [How it works](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/how-it-works.md): send loop, atomic claims, known limits
+- [Troubleshooting](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/troubleshooting.md): symptoms and fixes
+- [FAQ](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/docs/faq.md): short answers
+
+## Optional
+
+- [Security policy](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/SECURITY.md): data handling and vulnerability reporting
+- [Contributing](https://github.com/CaputoDavide93/Payroll-Mail-Service/blob/main/CONTRIBUTING.md): how to report an environment
