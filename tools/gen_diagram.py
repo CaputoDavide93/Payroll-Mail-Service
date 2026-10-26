@@ -4,8 +4,7 @@
   docs/assets/<name>-light.svg
   docs/assets/<name>-dark.svg
 
-House diagram kit (canonical copy: ~/.claude/skills/new-repo/assets/gen_diagram.py,
-first built for InkFrame-Immich). The engine below the "diagrams" line is shared
+House diagram kit. The engine below the "diagrams" line is shared
 verbatim across repos; only the diagram functions and DIAGRAMS change per repo.
 
 GitHub sanitises SVG in markdown: no <style>, no <script>, no web font, no
@@ -226,8 +225,8 @@ def architecture(scheme):
     k = Canvas(1180, 618, scheme,
                "The browser talks to the Express API in one Node process. The API keeps "
                "settings, campaigns and recipients in SQLite under DATA_DIR and hands payslip "
-               "preparation to a worker thread, which can ask the Anthropic API to match PDFs to "
-               "employees and encrypts each one with qpdf; the API can also ask Anthropic for a "
+               "preparation to a worker thread, which can ask an external AI service to match PDFs to "
+               "employees and encrypts each one with qpdf; the API can also ask the service for a "
                "pre-flight review. A send loop claims batches from SQLite every two seconds and "
                "sends them over SMTP.")
     c = k.c
@@ -244,7 +243,7 @@ def architecture(scheme):
               icon="server"),
         k.box(xs[2], rows[0], W, H, "DATA_DIR", ["SQLite: settings, campaigns,", "recipients; payslip PDFs"],
               icon="database"),
-        k.box(xs[0], rows[1], W, H, "Anthropic API", ["optional: PDF-to-name matching", "and the pre-flight review"],
+        k.box(xs[0], rows[1], W, H, "External AI service", ["optional: PDF-to-name matching", "and the pre-flight review"],
               icon="sparkle"),
         k.box(xs[1], rows[1], W, H, "Payslip thread", ["matches PDFs to employees,", "encrypts each with qpdf"],
               icon="lock"),
@@ -258,12 +257,12 @@ def architecture(scheme):
         # API -> payslip thread: the Excel and the ZIP go off the main thread.
         k.edge([(cx[1], rows[0] + H + 8), (cx[1], rows[1] - 8)]),
         k.text(cx[1] + 14, gap1 + 4, "Excel + ZIP", size=11.5, font=MONO, colour=c["chip"]),
-        # API -> Anthropic for the pre-flight review, routed round the browser.
+        # API -> AI service for the pre-flight review, routed round the browser.
         k.edge([(xs[1] + 32, rows[0] + H + 8), (xs[1] + 32, gap1), (cx[0], gap1), (cx[0], rows[1] - 8)],
                dash=True),
         k.text((cx[0] + xs[1] + 32) / 2, gap1 - 9, "pre-flight review", size=11.5, font=MONO,
                colour=c["chip"], anchor="middle"),
-        # Payslip thread -> Anthropic for matching.
+        # Payslip thread -> AI service for matching.
         k.edge([(xs[1] - 8, mids[1]), (xs[0] + W + 8, mids[1])], dash=True, label="names + filenames"),
         # Right column: the queue lives in SQLite, the send loop drains it.
         k.edge([(cx[2], rows[0] + H + 8), (cx[2], rows[1] - 8)], both=True),
