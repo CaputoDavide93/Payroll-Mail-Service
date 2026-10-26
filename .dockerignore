@@ -4,7 +4,6 @@ data
 .git
 *.log
 npm-debug.log
-.gstack
 terraform
 tests
 scripts
