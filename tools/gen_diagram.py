@@ -220,6 +220,22 @@ class Canvas:
 
 # ── the diagrams ──────────────────────────────────────────────────────────
 
+def card(k, x, y, w, h, title, lines=(), *, icon=None, tone="plain"):
+    """A box whose sub-lines may be monospace: `lines` holds strings, or
+    (text, True) for something literally typed, such as an endpoint."""
+    rows = [(r, False) if isinstance(r, str) else r for r in lines]
+    svg = k.box(x, y, w, h, title, [t for t, _ in rows], icon=icon, tone=tone)
+    c = k.c
+    colour = {"accent": c["on_accent"], "warn": c["warn"]}.get(tone, c["sub"])
+    for i, (t, mono) in enumerate(rows):
+        if mono:
+            plain = k.text(x + 16, y + 52 + i * 18, t, size=12.5, colour=colour,
+                           opacity="0.85" if tone == "accent" else None)
+            svg = svg.replace(plain, k.text(x + 16, y + 52 + i * 18, t, size=12,
+                                            colour=colour, font=MONO))
+    return svg
+
+
 def architecture(scheme):
     """One Node process, one SQLite file. The send loop is what survives."""
     k = Canvas(1180, 618, scheme,
@@ -241,15 +257,15 @@ def architecture(scheme):
               icon="laptop"),
         k.box(xs[1], rows[0], W, H, "Express API", ["server.js: the UI and /api,", "optional APP_PASSWORD gate"],
               icon="server"),
-        k.box(xs[2], rows[0], W, H, "DATA_DIR", ["SQLite: settings, campaigns,", "recipients; payslip PDFs"],
+        card(k, xs[2], rows[0], W, H, "Data Directory", [("DATA_DIR", True), "SQLite: settings, campaigns,", "recipients; payslip PDFs"],
               icon="database"),
-        k.box(xs[0], rows[1], W, H, "External AI service", ["optional: PDF-to-name matching", "and the pre-flight review"],
+        k.box(xs[0], rows[1], W, H, "External AI Service", ["optional: PDF-to-name matching", "and the pre-flight review"],
               icon="sparkle"),
-        k.box(xs[1], rows[1], W, H, "Payslip thread", ["matches PDFs to employees,", "encrypts each with qpdf"],
+        k.box(xs[1], rows[1], W, H, "Payslip Thread", ["matches PDFs to employees,", "encrypts each with qpdf"],
               icon="lock"),
-        k.box(xs[2], rows[1], W, H, "Send loop", ["every 2 s: claims a batch,", "keeps to the daily cap"],
+        k.box(xs[2], rows[1], W, H, "Send Loop", ["every 2 s: claims a batch,", "keeps to the daily cap"],
               icon="send", tone="accent"),
-        k.box(xs[2], rows[2], W, H, "SMTP server", ["Gmail or Workspace,", "allowlisted host, App Password"],
+        k.box(xs[2], rows[2], W, H, "SMTP Server", ["Gmail or Workspace,", "allowlisted host, App Password"],
               icon="mail"),
         # Row 1: browser in, state out.
         k.edge([(xs[0] + W + 8, mids[0]), (xs[1] - 8, mids[0])], label="/api + uploads"),
@@ -289,13 +305,13 @@ def aws_deployment(scheme):
     ax, bx, w = 354, 616, 210
     r1, r2 = 84, 240
     k.add(
-        k.group(330, 40, 520, 332, "EC2 INSTANCE, AMAZON LINUX 2023"),
-        k.box(ax, r1, w, 84, "nginx", ["TLS on 443,", "80 redirects to 443"], icon="shield"),
-        k.box(bx, r1, w, 84, "App container", ["SQLite and payslips on", "the mail-data volume"],
+        k.group(330, 40, 520, 332, "EC2 Instance, Amazon Linux 2023"),
+        k.box(ax, r1, w, 84, "Nginx", ["TLS on 443,", "80 redirects to 443"], icon="shield"),
+        k.box(bx, r1, w, 84, "App Container", ["SQLite and payslips on", "the mail-data volume"],
               icon="box", tone="accent"),
-        k.box(ax, r2, w, 100, "payroll-cert", ["issues and renews the", "certificate, twice daily"],
+        card(k, ax, r2, w, 100, "Certificate Renewal", [("payroll-cert", True), "renews the certificate,", "twice daily"],
               icon="lock"),
-        k.box(bx, r2, w, 100, "payroll-update", ["pulls a tag, health-checks,", "rolls back on failure"],
+        card(k, bx, r2, w, 100, "Release Updater", [("payroll-update", True), "pulls a tag, health-checks,", "rolls back on failure"],
               icon="rewind"),
         k.edge([(ax + w + 8, r1 + 42), (bx - 8, r1 + 42)], label=":3000"),
         k.edge([(ax + w / 2, r2 - 8), (ax + w / 2, r1 + 84 + 8)]),
@@ -305,7 +321,7 @@ def aws_deployment(scheme):
         k.text(bx + w / 2 + 12, (r1 + 84 + r2) / 2 + 4, "restarts", size=11.5, font=MONO,
                colour=c["chip"]),
         # Outside the box, left: who comes in, and who vouches for the certificate.
-        k.box(24, r1, 226, 84, "Office browser", ["office CIDRs only,", "no SSH at all"], icon="user"),
+        k.box(24, r1, 226, 84, "Office Browser", ["office CIDRs only,", "no SSH at all"], icon="user"),
         k.edge([(250 + 8, r1 + 42), (ax - 8, r1 + 42)], label=":443"),
         k.box(24, r2, 226, 100, "Let's Encrypt", ["issues the certificate", "for domain_name"],
               icon="shield"),
@@ -319,12 +335,12 @@ def aws_deployment(scheme):
     )
     by = 432
     k.add(
-        k.box(24, by, 226, 84, "Route53", ["A record to the Elastic IP,", "TXT for the challenge"],
+        k.box(24, by, 226, 84, "Route 53", ["A record to the Elastic IP,", "TXT for the challenge"],
               icon="globe"),
         k.edge([(ax + w / 2, r2 + 100 + 8), (ax + w / 2, by + 42), (250 + 8, by + 42)]),
         k.text(ax + w / 2 - 12, by + 33, "TXT record", size=11.5, font=MONO, colour=c["chip"],
                anchor="end"),
-        k.box(940, by, 216, 84, "scripts/deploy.sh", ["builds and pushes,", "then rolls the instance"],
+        card(k, 940, by, 216, 84, "Deploy Script", [("scripts/deploy.sh", True), "builds, pushes, rolls out"],
               icon="terminal"),
         k.edge([(1048, by - 8), (1048, r2 + 100 + 8)]),
         k.text(1036, by - 26, "push :sha, :latest, :base", size=11.5, font=MONO, colour=c["chip"],
