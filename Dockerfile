@@ -1,5 +1,5 @@
 # ---- Build stage: compile native deps (better-sqlite3) from the lockfile ----
-FROM node:22-trixie-slim AS build
+FROM node:25-trixie-slim AS build
 
 RUN apt-get update \
   && apt-get install -y --no-install-recommends python3 make g++ \
@@ -11,7 +11,7 @@ COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 
 # ---- Runtime stage: no compilers, non-root ----
-FROM node:22-trixie-slim
+FROM node:25-trixie-slim
 
 RUN apt-get update \
   && apt-get upgrade -y \
