@@ -55,16 +55,32 @@ describe('parseExcel (SheetJS CDN build)', () => {
   });
 });
 
+// A well-formed one-page PDF with a correct xref. `qpdf --empty` (zero pages) cannot be encrypted
+// by every qpdf 12 build, so the fixture must have a page.
+function onePagePdf() {
+  const objs = [
+    '<</Type/Catalog/Pages 2 0 R>>',
+    '<</Type/Pages/Kids[3 0 R]/Count 1>>',
+    '<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 200]/Resources<<>>>>'
+  ];
+  let out = '%PDF-1.4\n';
+  const offsets = objs.map((o, i) => { const at = out.length; out += `${i + 1} 0 obj\n${o}\nendobj\n`; return at; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n`;
+  for (const at of offsets) out += `${String(at).padStart(10, '0')} 00000 n \n`;
+  return out + `trailer\n<</Size ${objs.length + 1}/Root 1 0 R>>\nstartxref\n${xref}\n%%EOF\n`;
+}
+
 describe('protectPdf', () => {
   const hasQpdf = (() => {
     try { execFileSync('qpdf', ['--version']); return true; } catch { return false; }
   })();
 
-  it('encrypts with the given password and leaves no argfile behind', { skip: !hasQpdf && 'qpdf not installed' }, async () => {
+  it('encrypts with the given password and leaves no job file behind', { skip: !hasQpdf && 'qpdf not installed' }, async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'payslip-'));
     const input = path.join(dir, 'in.pdf');
     const output = path.join(dir, 'out.pdf');
-    execFileSync('qpdf', ['--empty', input]);
+    fs.writeFileSync(input, onePagePdf());
     const before = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('qpdf-'));
     await protectPdf(input, output, 'AB123456C');
     const after = fs.readdirSync(os.tmpdir()).filter((f) => f.startsWith('qpdf-'));

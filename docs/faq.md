@@ -17,7 +17,7 @@ Your server and your SMTP provider only, unless you opt in to AI matching. With 
 
 ## Does it store NI numbers?
 
-No. NI numbers are used only at the moment a PDF is encrypted and are never stored, logged or returned by any API. They reach `qpdf` through a private argfile, not the command line.
+No. NI numbers are used only at the moment a PDF is encrypted and are never stored, logged or returned by any API. They reach `qpdf` through a private job file, not the command line.
 
 ## How is each payslip protected?
 

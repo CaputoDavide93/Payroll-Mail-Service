@@ -29,7 +29,7 @@ A template is served at `/api/payslips/sample-excel` (the **download sample** li
 ## What is and is not kept
 
 - NI numbers are not stored, logged or returned by any API. They exist only while a
-  PDF is being encrypted, and reach `qpdf` through a private argfile, not the command line.
+  PDF is being encrypted, and reach `qpdf` through a private job file, not the command line.
 - Raw PDFs are deleted as soon as protection finishes.
 - Protected PDFs are deleted after sending when `PAYSLIP_DELETE_AFTER_SEND` is `true` (the default).
 - Whole runs are purged `PAYSLIP_RETENTION_DAYS` days after preparation (7 by default, `0` never). Runs with unsent recipients are kept.
