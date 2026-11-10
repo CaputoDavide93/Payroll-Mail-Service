@@ -89,20 +89,25 @@ export function extractZip(buffer, destFolder) {
 }
 
 export async function protectPdf(inputPath, outputPath, password) {
-  // Pass arguments via a chmod-600 @argfile (qpdf reads one argument per line) so the
-  // NI-number password never appears in process arguments (visible via ps / /proc/PID/cmdline).
-  const argfile = path.join(os.tmpdir(), `qpdf-${randomBytes(12).toString('hex')}.args`);
-  const args = ['--encrypt', password, password, '256', '--', inputPath, outputPath].join('\n') + '\n';
-  fs.writeFileSync(argfile, args, { mode: 0o600 });
+  // Pass the passwords via a chmod-600 JSON job file so the NI-number password never appears
+  // in process arguments (visible via ps / /proc/PID/cmdline). qpdf 12.3 on some platforms no
+  // longer expands @argfiles, so the job file is the portable way to keep them out of argv.
+  const jobfile = path.join(os.tmpdir(), `qpdf-${randomBytes(12).toString('hex')}.json`);
+  const job = {
+    inputFile: inputPath,
+    outputFile: outputPath,
+    encrypt: { userPassword: password, ownerPassword: password, '256bit': {} }
+  };
+  fs.writeFileSync(jobfile, JSON.stringify(job), { mode: 0o600 });
   try {
-    await execFileAsync('qpdf', [`@${argfile}`]);
+    await execFileAsync('qpdf', [`--job-json-file=${jobfile}`]);
   } catch {
-    // Don't propagate qpdf's raw error — it may echo the argfile/inputs.
+    // Don't propagate qpdf's raw error — it may echo the jobfile/inputs.
     // Remove any partial output file qpdf may have created before throwing.
     try { fs.unlinkSync(outputPath); } catch (e) { console.warn('[protectPdf] failed to remove partial output:', outputPath, e.message); }
     throw new Error('PDF protection failed (qpdf error).');
   } finally {
-    try { fs.unlinkSync(argfile); } catch { /* ignore */ }
+    try { fs.unlinkSync(jobfile); } catch { /* ignore */ }
   }
 }
 

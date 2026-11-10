@@ -76,7 +76,7 @@ describe('protectPdf', () => {
     try { execFileSync('qpdf', ['--version']); return true; } catch { return false; }
   })();
 
-  it('encrypts with the given password and leaves no argfile behind', { skip: !hasQpdf && 'qpdf not installed' }, async () => {
+  it('encrypts with the given password and leaves no job file behind', { skip: !hasQpdf && 'qpdf not installed' }, async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'payslip-'));
     const input = path.join(dir, 'in.pdf');
     const output = path.join(dir, 'out.pdf');
