@@ -5,7 +5,7 @@ Self-hosted Node service that emails each employee their own NI-locked payslip P
 ## Commands
 
 ```bash
-npm ci                    # install (Node 22; better-sqlite3 compiles natively)
+npm ci                    # install (Node 24; better-sqlite3 compiles natively)
 npm test                  # node --test; needs qpdf on PATH for the payslip tests
 npm start                 # run the app on PORT (default 3000)
 make check                # the gate: npm test, tools/gen_diagram.py --check, shellcheck scripts/deploy.sh

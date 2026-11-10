@@ -44,6 +44,8 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+// Express 5 leaves req.body undefined when the request carries no parsed body (4 gave {}).
+app.use((req, _res, next) => { req.body ??= {}; next(); });
 
 const upload = multer({
   storage: multer.memoryStorage(),

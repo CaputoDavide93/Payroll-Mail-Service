@@ -11,7 +11,7 @@
 - **Backend:** Node.js and Express. Mail goes out through `nodemailer`.
 - **Frontend:** static HTML, CSS and JavaScript with no build step. It follows the system light or dark setting.
 - **State:** one SQLite file (`better-sqlite3`) under `DATA_DIR` holds settings, campaigns and every recipient's status. That file is what makes crash-safe resume possible.
-- **Image:** a multi-stage Node 22 build from the lockfile, running as the unprivileged `node` user.
+- **Image:** a multi-stage Node 24 build from the lockfile, running as the unprivileged `node` user.
 
 ## The send loop
 
